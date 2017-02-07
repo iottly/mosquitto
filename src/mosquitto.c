@@ -34,6 +34,7 @@ Contributors:
 
 #ifndef WIN32
 #  include <sys/time.h>
+#include <dlfcn.h>
 #endif
 
 #include <errno.h>
@@ -68,6 +69,8 @@ int deny_severity = LOG_INFO;
 void handle_sigint(int signal);
 void handle_sigusr1(int signal);
 void handle_sigusr2(int signal);
+
+int (*gen_write_to_core)(struct mosquitto_db *db, struct mosquitto *context) = NULL;
 
 struct mosquitto_db *_mosquitto_get_db(void)
 {
@@ -228,6 +231,7 @@ int main(int argc, char *argv[])
 	SYSTEMTIME st;
 #else
 	struct timeval tv;
+	void *handle;
 #endif
 	struct mosquitto *ctxt, *ctxt_tmp;
 
@@ -253,6 +257,13 @@ int main(int argc, char *argv[])
 #else
 	gettimeofday(&tv, NULL);
 	srand(tv.tv_sec + tv.tv_usec);
+	
+	gen_write_to_core = NULL;
+	handle = dlopen("libmqtttocore.so", RTLD_NOW);
+	if(handle)
+	{
+		gen_write_to_core = dlsym(handle, "writefunc");
+	}
 #endif
 
 	memset(&int_db, 0, sizeof(struct mosquitto_db));
