@@ -70,8 +70,6 @@ void handle_sigint(int signal);
 void handle_sigusr1(int signal);
 void handle_sigusr2(int signal);
 
-int (*gen_write_to_core)(struct mosquitto_db *db, struct mosquitto *context) = NULL;
-
 struct mosquitto_db *_mosquitto_get_db(void)
 {
 	return &int_db;
@@ -257,13 +255,6 @@ int main(int argc, char *argv[])
 #else
 	gettimeofday(&tv, NULL);
 	srand(tv.tv_sec + tv.tv_usec);
-	
-	gen_write_to_core = NULL;
-	handle = dlopen("libmqtttocore.so", RTLD_NOW);
-	if(handle)
-	{
-		gen_write_to_core = dlsym(handle, "writefunc");
-	}
 #endif
 
 	memset(&int_db, 0, sizeof(struct mosquitto_db));
@@ -324,6 +315,19 @@ int main(int argc, char *argv[])
 	}
 #endif
 
+#ifndef WIN32
+	handle = dlopen("libmqtttocore.so", RTLD_NOW);
+	if(handle)
+	{
+		int (*custom_init)(struct mqtt3_config *config, struct mosquitto_db *db) = NULL;
+
+		custom_init = dlsym(handle, "custom_init");
+		if(custom_init) custom_init(&config, &int_db);
+	}
+        else
+        	printf("%s\n", dlerror());
+#endif
+	
 	listener_max = -1;
 	listensock_index = 0;
 	for(i=0; i<config.listener_count; i++){

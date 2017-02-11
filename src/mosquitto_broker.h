@@ -64,7 +64,8 @@ Contributors:
 enum mosquitto_protocol {
 	mp_mqtt,
 	mp_mqttsn,
-	mp_websockets
+	mp_websockets,
+	mp_custom
 };
 
 typedef uint64_t dbid_t;

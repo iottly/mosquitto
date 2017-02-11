@@ -34,6 +34,8 @@ lib/cpp/libmosquittopp.so*
 lib/libmosquitto.so*
 lib/libmosquitto.a
 
+custom/libmqtttocore.so
+
 test/ssl/*.csr
 
 test/lib/c/*.test

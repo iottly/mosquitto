@@ -1,6 +1,6 @@
 include config.mk
 
-DIRS=lib client src
+DIRS=lib client src custom
 DOCDIRS=man
 DISTDIRS=man
 
