@@ -4,7 +4,7 @@ include ../config.mk
 
 MOSQ_OBJS=custom.o
 
-MOSQ_LIBS=
+MOSQ_LIBS=-lpthread
 
 all : libmqtttocore.so
 
