@@ -13,20 +13,19 @@
 void* custom_loop(void *sock)
 {
   unsigned char buf[1024];
-  int n;
+  int fd, n;
   fd_set fds;
-  
-printf("custom loop %d\n", ((int*)sock)[1]);
+
+  fd = *((int*)sock);
   FD_ZERO(&fds);
   while(1)
   {
-    FD_SET(((int*)sock)[1], &fds);
-printf("select...\n");
-    n = select((((int*)sock)[1])+1, &fds, NULL, NULL, NULL);
-    printf("select: %d\n", n);
+    FD_SET(fd, &fds);
+    n = select(fd+1, &fds, NULL, NULL, NULL);
     
-    n = recv(((int*)sock)[1], buf, sizeof(buf), 0);
+    n = read(fd, buf, sizeof(buf));
     printf("read: %d\n", n);
+    if(n <= 0) return NULL;
   }
 }
 
@@ -34,7 +33,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 {
 	char *client_id = NULL;
 	struct mosquitto *context;
-	int ret, sock[2];
+	int ret, sock[2], *s;
 	pthread_t p;
 	
 	printf("**** Custom listener\n");
@@ -56,11 +55,12 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	mosquitto_log_printf(MOSQ_LOG_NOTICE, "Custom client connected as id '%s'.", client_id);
 	
 	socketpair(AF_LOCAL, SOCK_STREAM, 0, sock);
-	ret = pthread_create(&p, NULL, custom_loop, sock);
+	s = malloc(sizeof(int));
+	*s = sock[0];
+	pthread_create(&p, NULL, custom_loop, s);
 	pthread_detach(p);
-printf("custom %d %d %d\n", ret, sock[0], sock[1]);
 	
-	context->sock = sock[0];
+	context->sock = sock[1];
 	context->id = client_id;
 	
 	HASH_ADD_KEYPTR(hh_id, db->contexts_by_id, context->id, strlen(context->id), context);
