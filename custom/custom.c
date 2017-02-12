@@ -36,6 +36,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	int ret, sock[2], *s;
 	pthread_t p;
 	
+#if 0
 	printf("**** Custom listener\n");
 	
 	config->listener_count++;
@@ -47,6 +48,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	memset(&config->listeners[config->listener_count-1], 0, sizeof(struct _mqtt3_listener));
 	
 	config->listeners[config->listener_count-1].protocol = mp_custom;
+#endif
 	
 	client_id = strdup("custom");
 	
