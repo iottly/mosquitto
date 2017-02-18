@@ -1,4 +1,5 @@
 #include "mosquitto_broker.h"
+#include "mqtt3_protocol.h"
 /* Viene incluso "dummypthread.h", ma devo usare la libreria reale */
 #undef pthread_create 
 #include <stdio.h>
@@ -12,9 +13,10 @@
 
 void* custom_loop(void *sock)
 {
-  unsigned char buf[1024];
-  int fd, n;
+  unsigned char buf[1024], *message;
+  int fd, n, i, qos, len, plen;
   fd_set fds;
+  char *topic;
 
   fd = *((int*)sock);
   FD_ZERO(&fds);
@@ -24,8 +26,37 @@ void* custom_loop(void *sock)
     n = select(fd+1, &fds, NULL, NULL, NULL);
     
     n = read(fd, buf, sizeof(buf));
-    printf("read: %d\n", n);
+    //printf("read: %d\n", n);
     if(n <= 0) return NULL;
+    
+    //for(i=0; i<n; i++) printf("%02x", buf[i]);
+    //printf("\n");
+    
+    if((buf[0] & 0xF0) == PUBLISH)
+    {
+      /* QoS */
+      qos = (buf[0] & 0x06) >> 1;
+      
+      /* Topic */
+      len = buf[2]*256 + buf[3];
+      topic = malloc(len+1);
+      memcpy(topic, buf+4, len);
+      topic[len] = 0;
+      
+      /* Message */
+      plen = buf[1] - 2 - len;
+      message = malloc(plen);
+      memcpy(message, buf+4+len, plen);
+      
+      /* Stampa dei dati ricevuti -- DA SOSTITUIRE CON CODICE REALE */
+      /* Nota: il QoS ricevuto è sempre 0, anche se il messaggio di origine aveva QoS maggiori */
+      printf("** PUBLISH QoS=%d topic='%s' plen=%d\n** payload=", qos, topic, plen);
+      for(i=0; i<plen; i++) printf("%02x", message[i]);
+      printf("\n");
+      
+      free(topic);
+      free(message);
+    }
   }
 }
 
@@ -71,6 +102,8 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	
 	ret = mqtt3_sub_add(db, context, "test", 0, &db->subs);
 	printf("Subscribing 'test' (%d)\n", ret);
+	ret = mqtt3_sub_add(db, context, "temp", 0, &db->subs);
+	printf("Subscribing 'temp' (%d)\n", ret);
 	return 0;
 }
 
