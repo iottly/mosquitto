@@ -536,6 +536,42 @@ int mqtt3_config_read(struct mqtt3_config *config, bool reload)
 	return MOSQ_ERR_SUCCESS;
 }
 
+int _config_custom_parse(struct mqtt3_config *config, char **token, char **saveptr)
+{
+	if(!strcmp(*token, "post_lib"))
+	{
+		if(_conf_parse_string(token, "post_lib", &config->post_lib, *saveptr)) return MOSQ_ERR_INVAL;
+	}
+	else if(!strcmp(*token, "post_url"))
+	{
+		if(_conf_parse_string(token, "post_url", &config->post_url, *saveptr)) return MOSQ_ERR_INVAL;
+	}
+	else if(!strcmp(*token, "post_topic"))
+	{
+		if(config->post_topic_num < 100)
+		{
+			*token = strtok_r(NULL, " ", saveptr);
+			if(*token)
+			{
+				config->post_topic[config->post_topic_num] = strdup(*token);
+				config->post_topic_qos[config->post_topic_num] = 0;
+				*token = strtok_r(NULL, " ", saveptr);
+				if(*token)
+				{
+					sscanf(*token, "%d", &config->post_topic_qos[config->post_topic_num]);
+					if((config->post_topic_qos[config->post_topic_num] < 0) ||
+					   (config->post_topic_qos[config->post_topic_num] > 2))
+					{
+						return MOSQ_ERR_INVAL;
+					}
+				}
+				config->post_topic_num++;
+			}
+		}
+	}
+	return MOSQ_ERR_SUCCESS;
+}
+
 int _config_read_file_core(struct mqtt3_config *config, bool reload, const char *file, struct config_recurse *cr, int level, int *lineno, FILE *fptr)
 {
 	int rc;
@@ -1739,6 +1775,8 @@ int _config_read_file_core(struct mqtt3_config *config, bool reload, const char 
 						|| !strcmp(token, "max_log_entries")
 						|| !strcmp(token, "trace_output")){
 					_mosquitto_log_printf(NULL, MOSQ_LOG_WARNING, "Warning: Unsupported rsmb configuration option \"%s\".", token);
+				}else if(!strncmp(token, "post_", 5)){
+					_config_custom_parse(config, &token, &saveptr);
 				}else{
 					_mosquitto_log_printf(NULL, MOSQ_LOG_ERR, "Error: Unknown configuration variable \"%s\".", token);
 					return MOSQ_ERR_INVAL;

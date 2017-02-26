@@ -316,16 +316,19 @@ int main(int argc, char *argv[])
 #endif
 
 #ifndef WIN32
-	handle = dlopen("libmqtttocore.so", RTLD_NOW);
-	if(handle)
+	if(config.post_lib)
 	{
-		int (*custom_init)(struct mqtt3_config *config, struct mosquitto_db *db) = NULL;
-
-		custom_init = dlsym(handle, "custom_init");
-		if(custom_init) custom_init(&config, &int_db);
-	}
-        else
-        	printf("%s\n", dlerror());
+		handle = dlopen(config.post_lib, RTLD_NOW);
+		if(handle)
+		{
+			int (*custom_init)(struct mqtt3_config *config, struct mosquitto_db *db) = NULL;
+	
+			custom_init = dlsym(handle, "custom_init");
+			if(custom_init) custom_init(&config, &int_db);
+		}
+		else
+			printf("%s\n", dlerror());
+        }
 #endif
 	
 	listener_max = -1;

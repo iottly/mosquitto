@@ -14,10 +14,13 @@
 void* custom_loop(void *sock)
 {
   unsigned char buf[1024], *message;
-  int fd, n, i, qos, len, plen;
+  int fd, n, i, ibuf, ibase;
+  int qos, mid, len, plen;
   fd_set fds;
   char *topic;
-
+  
+  ibuf = 0;
+  
   fd = *((int*)sock);
   FD_ZERO(&fds);
   while(1)
@@ -25,37 +28,80 @@ void* custom_loop(void *sock)
     FD_SET(fd, &fds);
     n = select(fd+1, &fds, NULL, NULL, NULL);
     
-    n = read(fd, buf, sizeof(buf));
+    n = read(fd, buf+ibuf, sizeof(buf)-ibuf);
     //printf("read: %d\n", n);
-    if(n <= 0) return NULL;
+    if(n <= 0)
+    {
+      printf("**** ERRORE - fine loop custom ****\n");
+      return NULL;
+    }
     
-    //for(i=0; i<n; i++) printf("%02x", buf[i]);
+    //for(i=0; i<n; i++) printf("%02x", buf[i+ibuf]);
     //printf("\n");
     
-    if((buf[0] & 0xF0) == PUBLISH)
+    ibuf += n;
+    
+    while((ibuf > 1) && (ibuf >= (buf[1]+2)))
     {
-      /* QoS */
-      qos = (buf[0] & 0x06) >> 1;
+      if((buf[0] & 0xF0) == PUBLISH)
+      {
+        /* QoS */
+        qos = (buf[0] & 0x06) >> 1;
+        
+        /* Topic */
+        len = (buf[2]<<8) + buf[3];
+        topic = malloc(len+1);
+        memcpy(topic, buf+4, len);
+        topic[len] = 0;
+        
+        /* Message ID */
+        mid = 0;
+        ibase = len+4;
+        if(qos > 0)
+        {
+          mid = (buf[len+4]<<8) + buf[len+5];
+          ibase += 2;
+        }
+        
+        /* Message */
+        plen = buf[1] - ibase + 2;
+        message = malloc(plen);
+        memcpy(message, buf+ibase, plen);
+        
+        /* Stampa dei dati ricevuti -- DA SOSTITUIRE CON CODICE REALE */
+        /* Nota: il QoS ricevuto è sempre 0, anche se il messaggio di origine aveva QoS maggiori */
+        printf("** PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d\n** payload=", qos, mid, topic, plen);
+        for(i=0; i<plen; i++) printf("%02x", message[i]);
+        printf("\n");
+        
+        free(topic);
+        free(message);
+        
+        switch(qos)
+        {
+          case 1:
+#warning Qualcosa da rivedere
+            /* La riposta è corretta ma a mosquitto non piace, verificare la registrazione dei topic */
+            buf[0] = PUBACK | (1<<1);
+            buf[1] = 2;
+            buf[2] = mid>>8;
+            buf[3] = mid;
+            write(fd, buf, 4);
+            break;
+          case 2:
+            /* Da gestire, ma per ora i topic li registro massimo QoS 1 */
+            break;
+          default:
+            break;
+        }
+        
+        /* if(qos == 2) _mosquitto_send_pubrec(context, mid);
+             ... che a sua volta riceve PUBREL che richiede il PUBCOMP.
+        */
+      }
       
-      /* Topic */
-      len = buf[2]*256 + buf[3];
-      topic = malloc(len+1);
-      memcpy(topic, buf+4, len);
-      topic[len] = 0;
-      
-      /* Message */
-      plen = buf[1] - 2 - len;
-      message = malloc(plen);
-      memcpy(message, buf+4+len, plen);
-      
-      /* Stampa dei dati ricevuti -- DA SOSTITUIRE CON CODICE REALE */
-      /* Nota: il QoS ricevuto è sempre 0, anche se il messaggio di origine aveva QoS maggiori */
-      printf("** PUBLISH QoS=%d topic='%s' plen=%d\n** payload=", qos, topic, plen);
-      for(i=0; i<plen; i++) printf("%02x", message[i]);
-      printf("\n");
-      
-      free(topic);
-      free(message);
+      ibuf -= buf[1]+2;
+      memcpy(buf, buf+buf[1]+2, buf[1]+2);
     }
   }
 }
@@ -64,7 +110,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 {
 	char *client_id = NULL;
 	struct mosquitto *context;
-	int ret, sock[2], *s;
+	int i, ret, sock[2], *s;
 	pthread_t p;
 	
 #if 0
@@ -100,10 +146,11 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	HASH_ADD(hh_sock, db->contexts_by_sock, sock, sizeof(context->sock), context);
 	context->state = mosq_cs_connected;
 	
-	ret = mqtt3_sub_add(db, context, "test", 0, &db->subs);
-	printf("Subscribing 'test' (%d)\n", ret);
-	ret = mqtt3_sub_add(db, context, "temp", 0, &db->subs);
-	printf("Subscribing 'temp' (%d)\n", ret);
+	for(i=0; i<config->post_topic_num; i++)
+	{
+		ret = mqtt3_sub_add(db, context, config->post_topic[i], config->post_topic_qos[i], &db->subs);
+		printf("Subscribing '%s' QoS=%d (%d)\n", config->post_topic[i], config->post_topic_qos[i], ret);
+	}
 	return 0;
 }
 
