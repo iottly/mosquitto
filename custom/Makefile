@@ -3,7 +3,7 @@ include ../config.mk
 .PHONY : really clean install
 
 MOSQ_CFLAGS=-DWITH_BROKER -DWITH_BRIDGE
-MOSQ_OBJS=custom.o
+MOSQ_OBJS=custom.o http.o
 
 MOSQ_LIBS=-lpthread
 
@@ -26,7 +26,9 @@ clean :
 libmqtttocore.so : ${MOSQ_OBJS}
 	${CROSS_COMPILE}$(CC) -shared $^ -o $@ ${MOSQ_LIBS}
 
-custom.o : custom.c
+custom.o : custom.c http.h
 	${CROSS_COMPILE}$(CC) $(LIB_CFLAGS) -I../src $(MOSQ_CFLAGS) -c $< -o $@
 
+http.o : http.c http.h
+	${CROSS_COMPILE}$(CC) $(LIB_CFLAGS) -I../src $(MOSQ_CFLAGS) -c $< -o $@
 

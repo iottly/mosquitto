@@ -1,5 +1,6 @@
 #include "mosquitto_broker.h"
 #include "mqtt3_protocol.h"
+#include "http.h"
 /* Viene incluso "dummypthread.h", ma devo usare la libreria reale */
 #undef pthread_create 
 #include <stdio.h>
@@ -113,6 +114,18 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	int i, ret, sock[2], *s;
 	pthread_t p;
 	
+	struct http_message msg;
+	memset(&msg, 0, sizeof(struct http_message));
+	
+	i = http_post(/*"http://requestb.in/147z7ab1"*/ config->post_url, "------multi----\r\n\
+Content-Disposition: form-data; name=\"from\"\r\n\r\npippo\r\n\
+------multi----\r\n\
+Content-Disposition: form-data; name=\"to\"\r\n\r\npluto\r\n\
+------multi------\r\n");
+
+	while(http_response(i, &msg) > 0);
+	printf("Code: %d\n", msg.header.code);
+
 #if 0
 	printf("**** Custom listener\n");
 	

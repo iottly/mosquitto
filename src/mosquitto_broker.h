@@ -152,6 +152,7 @@ struct mqtt3_config {
 	
 	char *post_lib;
 	char *post_url;
+	char *post_dest;
 	int post_topic_num;
 	char *post_topic[100];
 	int post_topic_qos[100];
