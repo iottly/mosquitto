@@ -113,8 +113,9 @@ void* custom_loop(void *data)
           
           /* Message */
           plen = buf[1] - ibase + 2;
-          message = malloc(plen);
+          message = malloc(plen+1);
           memcpy(message, buf+ibase, plen);
+          message[plen] = 0;
           
           /* Stampa dei dati ricevuti -- DA SOSTITUIRE CON CODICE REALE */
           /* Nota: il QoS ricevuto è sempre 0, anche se il messaggio di origine aveva QoS maggiori */
