@@ -533,10 +533,12 @@ int http_response(int sd, struct http_message *msg) {
 	return http_read(sd, msg);
 }
 
-int http_post(const char *url, const char *content) {
+#define MULTIPART_BOUNDARY "----multi----"
+
+int http_post(const char *url, int ndata, char **topic, char **value) {
 	struct http_url *hu;
-	int sd;
-	char content_length[16];
+	int sd, i, len;
+	char content_length[16], *content;
 
 	if (!(hu = http_parse_url(url)) ||
 			(sd = http_connect(hu)) < 0) {
@@ -544,9 +546,22 @@ int http_post(const char *url, const char *content) {
 		free(hu);
 		return -1;
 	}
-
-	sprintf(content_length, "%ld", strlen(content));
 	
+	len = 2+4+strlen(MULTIPART_BOUNDARY)+1;
+	for(i=0; i<ndata; i++)
+	{
+	  len += 4+strlen(MULTIPART_BOUNDARY)+strlen(topic[i]) + strlen(value[i]) +
+	    strlen("Content-Disposition: form-data; name=\"\"\r\n\r\n\r\n");
+        }
+	sprintf(content_length, "%d\r\n", len-1);
+        content = malloc(len);
+        content[0] = 0;
+	for(i=0; i<ndata; i++)
+	{
+          sprintf(content+strlen(content), "--" MULTIPART_BOUNDARY "\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n", topic[i], value[i]);
+        }
+        sprintf(content+strlen(content), "--" MULTIPART_BOUNDARY "--\r\n");
+        
 	/* this way even very very long query strings won't be a problem */
 	if (http_send(sd, "POST /") ||
 			http_send(sd, hu->query) ||
@@ -558,8 +573,7 @@ Host: ") ||
 Accept: */*\r\n\
 Content-Length: ") ||
 			http_send(sd, content_length) ||
-			http_send(sd, "\r\n\
-Content-Type: multipart/form-data;; boundary=----multi----\r\n\
+			http_send(sd, "Content-Type: multipart/form-data;; boundary=" MULTIPART_BOUNDARY "\r\n\
 Connection: close\r\n\
 \r\n") ||
 			http_send(sd, content)) {

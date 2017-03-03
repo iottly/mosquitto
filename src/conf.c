@@ -550,6 +550,10 @@ int _config_custom_parse(struct mqtt3_config *config, char **token, char **savep
 	{
 		if(_conf_parse_string(token, "post_dest", &config->post_dest, *saveptr)) return MOSQ_ERR_INVAL;
 	}
+	else if(!strcmp(*token, "post_header"))
+	{
+		if(_conf_parse_string(token, "post_header", &config->post_header, *saveptr)) return MOSQ_ERR_INVAL;
+	}
 	else if(!strcmp(*token, "post_topic"))
 	{
 		if(config->post_topic_num < 100)
