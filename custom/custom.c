@@ -179,7 +179,7 @@ void* custom_loop(void *data)
       n = http_read(fdhttp, &hmsg);
       if(n == 0)
       {
-        printf("Code: %d\n", hmsg.header.code);
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Code: %d\n", hmsg.header.code);
         close(fdhttp);
         fdhttp = -1;
         cmsg = NULL;
@@ -219,7 +219,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	for(i=0; i<config->post_topic_num; i++)
 	{
 		ret = mqtt3_sub_add(db, context, config->post_topic[i], config->post_topic_qos[i], &db->subs);
-		printf("Subscribing '%s' QoS=%d (%d)\n", config->post_topic[i], config->post_topic_qos[i], ret);
+		mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Subscribing '%s' QoS=%d (%d)\n", config->post_topic[i], config->post_topic_qos[i], ret);
 	}
 	return 0;
 }
