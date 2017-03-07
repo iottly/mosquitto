@@ -195,46 +195,10 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	int i, ret, sock[2];
 	pthread_t p;
 	struct custom_data *data;
-	
-#if 0
-	char *topic[3];
-	char *value[3];
-	
-	struct http_message msg;
-	memset(&msg, 0, sizeof(struct http_message));
-	
-	topic[0] = "from";
-	value[0] = "mittente";
-	topic[1] = "to";
-	value[1] = "destinatario";
-	topic[2] = "msg";
-	value[2] = "messaggio";
-	
-	i = http_post(/*"http://requestb.in/147z7ab1"*/ config->post_url, 3, topic, value);
-
-	/* Per come è fatta attualmente, http_response() ritorna 0 solo alla chiusura
-	   del socket. Per la connessione keepalive bisogna ritoccare qualcosa. */
-	while(http_response(i, &msg) > 0);
-	printf("Code: %d\n", msg.header.code);
-#endif
-
-#if 0
-	printf("**** Custom listener\n");
-	
-	config->listener_count++;
-	config->listeners = realloc(config->listeners, sizeof(struct _mqtt3_listener)*config->listener_count);
-	if(!config->listeners){
-		mosquitto_log_printf(MOSQ_LOG_ERR, "Error: Out of memory.");
-		return MOSQ_ERR_NOMEM;
-	}
-	memset(&config->listeners[config->listener_count-1], 0, sizeof(struct _mqtt3_listener));
-	
-	config->listeners[config->listener_count-1].protocol = mp_custom;
-#endif
-	
+		
 	msg_head = msg_tail = NULL;
 	
-	client_id = strdup("custom");
+	client_id = strdup(config->post_clientid);
 	context = calloc(1, sizeof(struct mosquitto));
 	mosquitto_log_printf(MOSQ_LOG_NOTICE, "Custom client connected as id '%s'.", client_id);
 	

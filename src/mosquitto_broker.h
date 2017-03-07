@@ -151,6 +151,7 @@ struct mqtt3_config {
 	int auth_option_count;
 	
 	char *post_lib;
+	char *post_clientid;
 	char *post_url;
 	char *post_dest;
 	char *post_header;

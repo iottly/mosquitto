@@ -542,6 +542,10 @@ int _config_custom_parse(struct mqtt3_config *config, char **token, char **savep
 	{
 		if(_conf_parse_string(token, "post_lib", &config->post_lib, *saveptr)) return MOSQ_ERR_INVAL;
 	}
+	else if(!strcmp(*token, "post_clientid"))
+	{
+		if(_conf_parse_string(token, "post_clientid", &config->post_clientid, *saveptr)) return MOSQ_ERR_INVAL;
+	}
 	else if(!strcmp(*token, "post_url"))
 	{
 		if(_conf_parse_string(token, "post_url", &config->post_url, *saveptr)) return MOSQ_ERR_INVAL;
