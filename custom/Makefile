@@ -12,7 +12,7 @@ all : posthttp.so
 install : all
 	$(INSTALL) -d ${DESTDIR}$(prefix)/lib${LIB_SUFFIX}/
 	$(INSTALL) -s --strip-program=${CROSS_COMPILE}${STRIP} posthttp.so ${DESTDIR}${prefix}/lib${LIB_SUFFIX}/posthttp.so
-	ln -sf posthttp.so ${DESTDIR}${prefix}/lib${LIB_SUFFIX}/posthttp.so
+	#ln -sf posthttp.so ${DESTDIR}${prefix}/lib${LIB_SUFFIX}/posthttp.so
 	#$(MAKE) -C cpp install
 
 uninstall :
