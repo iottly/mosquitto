@@ -72,8 +72,10 @@ void* custom_loop(void *data)
       FD_SET(fdhttp, &fds);
       if(fdhttp > fdmax) fdmax = fdhttp;
     }
+    printf("WAITING FOR DATA\n");
     n = select(fdmax+1, &fds, NULL, NULL, NULL);
-    
+    printf("RECEIVED DATA: %d\n", n);
+
     if(FD_ISSET(fd, &fds))
     {
       n = read(fd, buf+ibuf, sizeof(buf)-ibuf);
