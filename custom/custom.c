@@ -77,7 +77,7 @@ void* custom_loop(void *data)
     if(FD_ISSET(fd, &fds))
     {
       n = read(fd, buf+ibuf, sizeof(buf)-ibuf);
-      //printf("read: %d\n", n);
+      printf("read: %d\n", n);
       if(n <= 0)
       {
         printf("**** ERRORE - fine loop custom ****\n");
