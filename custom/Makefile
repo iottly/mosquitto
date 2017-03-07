@@ -7,23 +7,23 @@ MOSQ_OBJS=custom.o http.o
 
 MOSQ_LIBS=-lpthread
 
-all : libmqtttocore.so
+all : posthttp.so
 
 install : all
 	$(INSTALL) -d ${DESTDIR}$(prefix)/lib${LIB_SUFFIX}/
-	$(INSTALL) -s --strip-program=${CROSS_COMPILE}${STRIP} libmqtttocore.so ${DESTDIR}${prefix}/lib${LIB_SUFFIX}/libmqtttocore.so
-	ln -sf libmqtttocore.so ${DESTDIR}${prefix}/lib${LIB_SUFFIX}/libmqtttocore.so
-	$(MAKE) -C cpp install
+	$(INSTALL) -s --strip-program=${CROSS_COMPILE}${STRIP} posthttp.so ${DESTDIR}${prefix}/lib${LIB_SUFFIX}/posthttp.so
+	ln -sf posthttp.so ${DESTDIR}${prefix}/lib${LIB_SUFFIX}/posthttp.so
+	#$(MAKE) -C cpp install
 
 uninstall :
-	-rm -f ${DESTDIR}${prefix}/lib${LIB_SUFFIX}/libmqtttocore.so
+	-rm -f ${DESTDIR}${prefix}/lib${LIB_SUFFIX}/posthttp.so
 
 reallyclean : clean
 
 clean :
-	-rm -f *.o libmqtttocore.so
+	-rm -f *.o posthttp.so
 
-libmqtttocore.so : ${MOSQ_OBJS}
+posthttp.so : ${MOSQ_OBJS}
 	${CROSS_COMPILE}$(CC) -shared $^ -o $@ ${MOSQ_LIBS}
 
 custom.o : custom.c http.h
