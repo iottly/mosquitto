@@ -3,6 +3,7 @@
 #include <ws2tcpip.h>
 #else
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #endif
