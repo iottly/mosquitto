@@ -77,7 +77,7 @@ void* custom_loop(void *data)
     n = select(fdmax+1, &fds, NULL, NULL, NULL);
     if (n == -1)
     {
-      printf("SELECT ERROR: %d\n", );
+      printf("SELECT ERROR: %d\n", errno);
     }
     printf("RECEIVED DATA: %d\n", n);
 
