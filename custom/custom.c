@@ -209,7 +209,9 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	int i, ret, sock[2];
 	pthread_t p;
 	struct custom_data *data;
-		
+	struct _mosquitto_acl_user *acl_user;
+	struct _mosquitto_acl *acl;
+	
 	msg_head = msg_tail = NULL;
 	
 	client_id = strdup(config->post_clientid);
@@ -225,6 +227,9 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	
 	context->sock = sock[1];
 	context->id = client_id;
+	/* Da popolare con la lista dei topic sottoscritti */
+	context->acl_list = calloc(1, sizeof(struct _mosquitto_acl_user));
+	
 	
 	HASH_ADD_KEYPTR(hh_id, db->contexts_by_id, context->id, strlen(context->id), context);
 	HASH_ADD(hh_sock, db->contexts_by_sock, sock, sizeof(context->sock), context);
@@ -234,7 +239,15 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	{
 		ret = mqtt3_sub_add(db, context, config->post_topic[i], config->post_topic_qos[i], &db->subs);
 		mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Subscribing '%s' QoS=%d (%d)", config->post_topic[i], config->post_topic_qos[i], ret);
+		
+		/* Popolo la lista ACL con i topic registrati. */
+		acl = calloc(1, sizeof(struct _mosquitto_acl));
+		acl->topic = config->post_topic[i];
+		acl->access = 1;
+		acl->next = context->acl_list->acl;
+		context->acl_list->acl = acl;
 	}
+
 	return 0;
 }
 
