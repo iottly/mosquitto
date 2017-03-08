@@ -188,7 +188,7 @@ void* custom_loop(void *data)
       }
     }
     
-    if(FD_ISSET(fdhttp, &fds))
+    if((fdhttp >= 0) && FD_ISSET(fdhttp, &fds))
     {
       n = http_read(fdhttp, &hmsg);
       if(n == 0)
