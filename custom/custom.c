@@ -8,6 +8,7 @@
 #include <sys/socket.h>
 #include <pthread.h>
 #include <sys/select.h>
+#include <errno.h>
 
 #define _mosquitto_malloc(x) malloc(x)
 #define _mosquitto_free(x) free(x)
@@ -74,6 +75,10 @@ void* custom_loop(void *data)
     }
     printf("WAITING FOR DATA\n");
     n = select(fdmax+1, &fds, NULL, NULL, NULL);
+    if (n == -1)
+    {
+      printf("SELECT ERROR: %d\n", );
+    }
     printf("RECEIVED DATA: %d\n", n);
 
     if(FD_ISSET(fd, &fds))
