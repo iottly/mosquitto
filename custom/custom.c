@@ -9,6 +9,8 @@
 #include <pthread.h>
 #include <sys/select.h>
 
+#include <errno.h>
+
 #define _mosquitto_malloc(x) malloc(x)
 #define _mosquitto_free(x) free(x)
 
@@ -38,6 +40,7 @@ void* custom_loop(void *data)
 	
   ibuf = 0;
   cmsg = NULL;
+  fdhttp = -1;
   
   fd = cdata->sock;
   FD_ZERO(&fds);
@@ -73,6 +76,16 @@ void* custom_loop(void *data)
       if(fdhttp > fdmax) fdmax = fdhttp;
     }
     n = select(fdmax+1, &fds, NULL, NULL, NULL);
+    
+    if(n < 0)
+    {
+      /* Questo log va rimosso appena soddisfatti della soluzione */
+      mosquitto_log_printf(MOSQ_LOG_WARNING, "**** WARNING - select returned errno %d ****", errno);
+      if(errno == EINTR) continue;
+      mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit ****");
+      /* Forse meglio uccidere tutto mosquitto? Con "exit(0)". */
+      return NULL;
+    }
     
     if(FD_ISSET(fd, &fds))
     {
@@ -119,9 +132,10 @@ void* custom_loop(void *data)
           
           /* Stampa dei dati ricevuti -- DA SOSTITUIRE CON CODICE REALE */
           /* Nota: il QoS ricevuto è sempre 0, anche se il messaggio di origine aveva QoS maggiori */
-          printf("** PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d\n** payload=", qos, mid, topic, plen);
-          for(i=0; i<plen; i++) printf("%02x", message[i]);
-          printf("\n");
+          //printf("** PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d\n** payload=", qos, mid, topic, plen);
+          //for(i=0; i<plen; i++) printf("%02x", message[i]);
+          //printf("\n");
+          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d", qos, mid, topic, plen);
           
           tmsg = malloc(sizeof(struct msglist));
           if(tmsg)
