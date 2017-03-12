@@ -30,7 +30,7 @@ void* custom_loop(void *data)
   struct custom_data *cdata = data;
   unsigned char buf[1024], *message;
   int fd, fdhttp, fdmax, n, i, ibuf, ibase;
-  int qos, mid, len, plen;
+  int qos, mid, len, tlen, tlen_len, tlen_valid, plen;
   fd_set fds;
   char *topic;
   struct msglist *tmsg, *cmsg;
@@ -102,7 +102,24 @@ void* custom_loop(void *data)
       
       ibuf += n;
       
-      while((ibuf > 1) && (ibuf >= (buf[1]+2)))
+      /* Verifica se ho tutti i byte per tlen e calcola la base
+         di partenza del messaggio. */
+      tlen_valid = 0;
+      tlen = 0;
+      for(tlen_len=1; tlen_len<=4; tlen_len++)
+      {
+        if(ibuf > tlen_len)
+        {
+          tlen += (buf[tlen_len] & 0x7f) << (7*(tlen_len-1));
+          if(!(buf[tlen_len] & 0x80))
+          {
+            tlen_valid = 1;
+            break;
+          }
+        }
+      }
+      
+      while(tlen_valid && (ibuf >= (tlen+tlen_len+1)))
       {
         if((buf[0] & 0xF0) == PUBLISH)
         {
@@ -110,22 +127,22 @@ void* custom_loop(void *data)
           qos = (buf[0] & 0x06) >> 1;
           
           /* Topic */
-          len = (buf[2]<<8) + buf[3];
+          len = (buf[tlen_len+1]<<8) + buf[tlen_len+2];
           topic = malloc(len+1);
-          memcpy(topic, buf+4, len);
+          memcpy(topic, buf+tlen_len+3, len);
           topic[len] = 0;
           
           /* Message ID */
           mid = 0;
-          ibase = len+4;
+          ibase = len+tlen_len+3;
           if(qos > 0)
           {
-            mid = (buf[len+4]<<8) + buf[len+5];
+            mid = (buf[len+tlen_len+3]<<8) + buf[len+tlen_len+4];
             ibase += 2;
           }
           
           /* Message */
-          plen = buf[1] - ibase + 2;
+          plen = tlen - ibase + 2;
           message = malloc(plen+1);
           memcpy(message, buf+ibase, plen);
           message[plen] = 0;
@@ -183,8 +200,24 @@ void* custom_loop(void *data)
           */
         }
         
-        ibuf -= buf[1]+2;
-        memcpy(buf, buf+buf[1]+2, buf[1]+2);
+        ibuf -= tlen+tlen_len+1;
+        memcpy(buf, buf+tlen+tlen_len+1, tlen+tlen_len+1);
+        
+        /* Controllo se c'è un altro messaggio accodato del quale conosco la lunghezza. */
+        tlen_valid = 0;
+        tlen = 0;
+        for(tlen_len=1; tlen_len<=4; tlen_len++)
+        {
+          if(ibuf > tlen_len)
+          {
+            tlen += (buf[tlen_len] & 0x7f) << (7*(tlen_len-1));
+            if(!(buf[tlen_len] & 0x80))
+            {
+              tlen_valid = 1;
+              break;
+            }
+          }
+        }
       }
     }
     
