@@ -58,10 +58,15 @@ void* custom_loop(void *data)
       ptopic[1] = "to";
       pvalue[1] = cdata->config->post_dest;
       ptopic[2] = "msg";
-      pvalue[2] = malloc(strlen(cdata->config->post_header)+strlen(cmsg->value)+2);
-      strcpy(pvalue[2], cdata->config->post_header);
-      strcat(pvalue[2], " ");
-      strcat(pvalue[2], cmsg->value);
+      if(cdata->config->post_header)
+      {
+        pvalue[2] = malloc(strlen(cdata->config->post_header)+strlen(cmsg->value)+2);
+        strcpy(pvalue[2], cdata->config->post_header);
+        strcat(pvalue[2], " ");
+        strcat(pvalue[2], cmsg->value);
+      }
+      else
+        pvalue[2] = strdup(cmsg->value);
       fdhttp = http_post(cdata->config->post_url, 3, ptopic, pvalue);
       free(pvalue[2]);
       free(cmsg->topic);
