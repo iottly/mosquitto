@@ -147,7 +147,7 @@ void* custom_loop(void *data)
           }
           
           /* Message */
-          plen = tlen - ibase + 2;
+          plen = tlen+tlen_len+1 - ibase;
           message = malloc(plen+1);
           memcpy(message, buf+ibase, plen);
           message[plen] = 0;
