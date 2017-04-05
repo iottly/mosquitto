@@ -46,6 +46,9 @@ void* custom_loop(void *data)
   FD_ZERO(&fds);
   while(1)
   {
+
+    mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 080");
+
     if(!cmsg && msg_head)
     {
       cmsg = msg_head;
@@ -64,17 +67,31 @@ void* custom_loop(void *data)
         strcpy(pvalue[2], cdata->config->post_header);
         strcat(pvalue[2], " ");
         strcat(pvalue[2], cmsg->value);
+
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 090");
+
       }
       else
         pvalue[2] = strdup(cmsg->value);
+
       fdhttp = http_post(cdata->config->post_url, 3, ptopic, pvalue);
+      
+      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 100");
+
       free(pvalue[2]);
       free(cmsg->topic);
       free(cmsg->value);
+
+      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 110");
+
     }
     
     fdmax = fd;
     FD_SET(fd, &fds);
+
+    mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 120");
+
+
     if(fdhttp >= 0)
     {
       FD_SET(fdhttp, &fds);
@@ -95,6 +112,10 @@ void* custom_loop(void *data)
     if(FD_ISSET(fd, &fds))
     {
       n = read(fd, buf+ibuf, sizeof(buf)-ibuf);
+
+      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 130");
+
+
       //printf("read: %d\n", n);
       if(n <= 0)
       {
@@ -123,9 +144,15 @@ void* custom_loop(void *data)
           }
         }
       }
+
+      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 140");
+
       
       while(tlen_valid && (ibuf >= (tlen+tlen_len+1)))
       {
+
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 150");
+
         if((buf[0] & 0xF0) == PUBLISH)
         {
           /* QoS */
@@ -136,6 +163,8 @@ void* custom_loop(void *data)
           topic = malloc(len+1);
           memcpy(topic, buf+tlen_len+3, len);
           topic[len] = 0;
+
+          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 160");
           
           /* Message ID */
           mid = 0;
@@ -145,7 +174,9 @@ void* custom_loop(void *data)
             mid = (buf[len+tlen_len+3]<<8) + buf[len+tlen_len+4];
             ibase += 2;
           }
-          
+
+          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 170");
+                    
           /* Message */
           plen = tlen+tlen_len+1 - ibase;
           message = malloc(plen+1);
@@ -162,6 +193,7 @@ void* custom_loop(void *data)
           tmsg = malloc(sizeof(struct msglist));
           if(tmsg)
           {
+            mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 010");
             tmsg->topic = topic;
             tmsg->value = message;
             tmsg->next = NULL;
@@ -181,6 +213,9 @@ void* custom_loop(void *data)
             free(topic);
             free(message);
           }
+
+          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 020");
+
           
           switch(qos)
           {
@@ -192,6 +227,9 @@ void* custom_loop(void *data)
               buf[2] = mid>>8;
               buf[3] = mid;
               write(fd, buf, 4);
+              
+              mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 030");
+
               break;
             case 2:
               /* Da gestire, ma per ora i topic li registro massimo QoS 1 */
@@ -207,6 +245,8 @@ void* custom_loop(void *data)
         
         ibuf -= tlen+tlen_len+1;
         memcpy(buf, buf+tlen+tlen_len+1, tlen+tlen_len+1);
+        
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 040");
         
         /* Controllo se c'è un altro messaggio accodato del quale conosco la lunghezza. */
         tlen_valid = 0;
@@ -225,16 +265,25 @@ void* custom_loop(void *data)
         }
       }
     }
+
+    mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 050");
     
     if((fdhttp >= 0) && FD_ISSET(fdhttp, &fds))
     {
       n = http_read(fdhttp, &hmsg);
+
+      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 060");
+
+
       if(n == 0)
       {
         mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Code: %d", hmsg.header.code);
         close(fdhttp);
         fdhttp = -1;
         cmsg = NULL;
+
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 070");
+
       }
     }
   }
