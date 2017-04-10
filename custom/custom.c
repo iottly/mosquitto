@@ -64,6 +64,9 @@ void* custom_loop(void *data)
       if(cdata->config->post_header)
       {
         pvalue[2] = malloc(strlen(cdata->config->post_header)+strlen(cmsg->value)+2);
+        if (errno==ENOMEM) {
+          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 085 - ENOMEM");
+        }        
         strcpy(pvalue[2], cdata->config->post_header);
         strcat(pvalue[2], " ");
         strcat(pvalue[2], cmsg->value);
@@ -161,6 +164,9 @@ void* custom_loop(void *data)
           /* Topic */
           len = (buf[tlen_len+1]<<8) + buf[tlen_len+2];
           topic = malloc(len+1);
+          if (errno==ENOMEM) {
+            mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 155 - ENOMEM");
+          }          
           memcpy(topic, buf+tlen_len+3, len);
           topic[len] = 0;
 
@@ -180,6 +186,9 @@ void* custom_loop(void *data)
           /* Message */
           plen = tlen+tlen_len+1 - ibase;
           message = malloc(plen+1);
+          if (errno==ENOMEM) {
+            mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 175 - ENOMEM");
+          }
           memcpy(message, buf+ibase, plen);
           message[plen] = 0;
           
@@ -191,6 +200,9 @@ void* custom_loop(void *data)
           mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d", qos, mid, topic, plen);
           
           tmsg = malloc(sizeof(struct msglist));
+          if (errno==ENOMEM) {
+            mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 176 - ENOMEM");
+          }          
           if(tmsg)
           {
             mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 010");
@@ -307,6 +319,10 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	
 	socketpair(AF_LOCAL, SOCK_STREAM, 0, sock);
 	data = malloc(sizeof(struct custom_data));
+  if (errno==ENOMEM) {
+    mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- custom_init - ENOMEM");
+  }          
+
 	data->sock = sock[0];
 	data->config = config;
 	pthread_create(&p, NULL, custom_loop, data);
