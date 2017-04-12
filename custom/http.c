@@ -556,6 +556,12 @@ int http_post(const char *url, int ndata, char **topic, char **value) {
         }
 	sprintf(content_length, "%d\r\n", len-1);
         content = malloc(len);
+        if(content == NULL)
+        {
+          free(hu);
+          return -1;
+        }
+        
         content[0] = 0;
 	for(i=0; i<ndata; i++)
 	{

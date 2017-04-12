@@ -29,7 +29,7 @@ void* custom_loop(void *data)
 {
   struct custom_data *cdata = data;
   unsigned char buf[1024], *message;
-  int fd, fdhttp, fdmax, n, i, ibuf, ibase;
+  int fd, fdhttp, fdmax, n, /*i,*/ ibuf, ibase;
   int qos, mid, len, tlen, tlen_len, tlen_valid, plen;
   fd_set fds;
   char *topic;
@@ -66,7 +66,19 @@ void* custom_loop(void *data)
         pvalue[2] = malloc(strlen(cdata->config->post_header)+strlen(cmsg->value)+2);
         if (errno==ENOMEM) {
           mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 085 - ENOMEM");
-        }        
+        }
+        if(pvalue[2] == NULL)
+        {
+          /* Scarto il messaggio. Sarebbe forse meglio riaccodare e aspettare
+             un po' di tempo? Non credo serva, se ormai la lista dei topic da
+             inoltrare ha saturato la memoria non ho più modo di liberarla se
+             non scartando i messaggi da qui. */
+          mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped!");
+          free(cmsg->topic);
+          free(cmsg->value);
+          cmsg = NULL;
+        }
+        
         strcpy(pvalue[2], cdata->config->post_header);
         strcat(pvalue[2], " ");
         strcat(pvalue[2], cmsg->value);
@@ -75,9 +87,23 @@ void* custom_loop(void *data)
 
       }
       else
+      {
         pvalue[2] = strdup(cmsg->value);
-
+        if(pvalue[2] == NULL)
+        {
+          mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped!");
+          free(cmsg->topic);
+          free(cmsg->value);
+          cmsg = NULL;
+        }
+      }
+      
       fdhttp = http_post(cdata->config->post_url, 3, ptopic, pvalue);
+      if(fdhttp < 0)
+      {
+        cmsg = NULL;
+        mosquitto_log_printf(MOSQ_LOG_ERR, "|- HTTP POST failed!");
+      }
       
       mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 100");
 
@@ -166,7 +192,13 @@ void* custom_loop(void *data)
           topic = malloc(len+1);
           if (errno==ENOMEM) {
             mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 155 - ENOMEM");
-          }          
+          }
+          if(topic == NULL)
+          {
+            mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped!");
+#warning Rispondere NAK se QoS > 0
+            break;
+          }
           memcpy(topic, buf+tlen_len+3, len);
           topic[len] = 0;
 
@@ -189,6 +221,13 @@ void* custom_loop(void *data)
           if (errno==ENOMEM) {
             mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 175 - ENOMEM");
           }
+          if(message == NULL)
+          {
+            free(topic);
+            mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped!");
+#warning Rispondere NAK se QoS > 0
+            break;
+          }
           memcpy(message, buf+ibase, plen);
           message[plen] = 0;
           
@@ -207,7 +246,7 @@ void* custom_loop(void *data)
           {
             mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 010");
             tmsg->topic = topic;
-            tmsg->value = message;
+            tmsg->value = (char*)message;
             tmsg->next = NULL;
             if(!msg_head)
             {
@@ -308,13 +347,25 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	int i, ret, sock[2];
 	pthread_t p;
 	struct custom_data *data;
-	struct _mosquitto_acl_user *acl_user;
 	struct _mosquitto_acl *acl;
 	
 	msg_head = msg_tail = NULL;
 	
 	client_id = strdup(config->post_clientid);
+	if(client_id == NULL)
+	{
+	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
+	  return -1;
+	}
+	
 	context = calloc(1, sizeof(struct mosquitto));
+	if(context == NULL)
+	{
+	  free(client_id);
+	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
+	  return -1;
+	}
+	
 	mosquitto_log_printf(MOSQ_LOG_NOTICE, "Custom client connected as id '%s'.", client_id);
 	
 	socketpair(AF_LOCAL, SOCK_STREAM, 0, sock);
@@ -322,16 +373,29 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
   if (errno==ENOMEM) {
     mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- custom_init - ENOMEM");
   }          
+	if(data == NULL)
+	{
+	  free(client_id);
+	  free(context);
+	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
+	  return -1;
+	}
 
 	data->sock = sock[0];
 	data->config = config;
-	pthread_create(&p, NULL, custom_loop, data);
-	pthread_detach(p);
 	
 	context->sock = sock[1];
 	context->id = client_id;
 	/* Da popolare con la lista dei topic sottoscritti */
 	context->acl_list = calloc(1, sizeof(struct _mosquitto_acl_user));
+	if(context->acl_list == NULL)
+	{
+	  free(client_id);
+	  free(context);
+	  free(data);
+	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
+	  return -1;
+	}
 	
 	
 	HASH_ADD_KEYPTR(hh_id, db->contexts_by_id, context->id, strlen(context->id), context);
@@ -345,12 +409,31 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 		
 		/* Popolo la lista ACL con i topic registrati. */
 		acl = calloc(1, sizeof(struct _mosquitto_acl));
+		if(acl == NULL)
+		{
+		  while(context->acl_list->acl)
+		  {
+		    acl = context->acl_list->acl->next;
+		    free(context->acl_list->acl);
+		    context->acl_list->acl = acl;
+		  }
+		  free(context->acl_list);
+		  free(client_id);
+		  free(data);
+		  free(context);
+		  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
+		  return -1;
+		}
+		
 		acl->topic = config->post_topic[i];
 		acl->access = 1;
 		acl->next = context->acl_list->acl;
 		context->acl_list->acl = acl;
 	}
 
+	pthread_create(&p, NULL, custom_loop, data);
+	pthread_detach(p);
+	
 	return 0;
 }
 
