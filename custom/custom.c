@@ -17,6 +17,7 @@
 struct custom_data {
   struct mqtt3_config *config;
   int sock;
+  int qcnt;
 };
 
 struct msglist {
@@ -47,13 +48,16 @@ void* custom_loop(void *data)
   while(1)
   {
 
-    mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 080");
+    //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 080");
 
     if(!cmsg && msg_head)
     {
       cmsg = msg_head;
       msg_head = msg_head->next;
       if(!msg_head) msg_tail = NULL;
+      
+      cdata->qcnt--;
+      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 082 - queue len %d", cdata->qcnt);
       
       memset(&hmsg, 0, sizeof(struct http_message));
       ptopic[0] = "from";
@@ -83,7 +87,7 @@ void* custom_loop(void *data)
         strcat(pvalue[2], " ");
         strcat(pvalue[2], cmsg->value);
 
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 090");
+        //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 090");
 
       }
       else
@@ -105,20 +109,20 @@ void* custom_loop(void *data)
         mosquitto_log_printf(MOSQ_LOG_ERR, "|- HTTP POST failed!");
       }
       
-      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 100");
+      //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 100");
 
       free(pvalue[2]);
       free(cmsg->topic);
       free(cmsg->value);
 
-      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 110");
+      //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 110");
 
     }
     
     fdmax = fd;
     FD_SET(fd, &fds);
 
-    mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 120");
+    //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 120");
 
 
     if(fdhttp >= 0)
@@ -142,7 +146,7 @@ void* custom_loop(void *data)
     {
       n = read(fd, buf+ibuf, sizeof(buf)-ibuf);
 
-      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 130");
+      //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 130");
 
 
       //printf("read: %d\n", n);
@@ -174,13 +178,13 @@ void* custom_loop(void *data)
         }
       }
 
-      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 140");
+      //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 140");
 
       
       while(tlen_valid && (ibuf >= (tlen+tlen_len+1)))
       {
 
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 150");
+        //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 150");
 
         if((buf[0] & 0xF0) == PUBLISH)
         {
@@ -202,7 +206,7 @@ void* custom_loop(void *data)
           memcpy(topic, buf+tlen_len+3, len);
           topic[len] = 0;
 
-          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 160");
+          //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 160");
           
           /* Message ID */
           mid = 0;
@@ -213,7 +217,7 @@ void* custom_loop(void *data)
             ibase += 2;
           }
 
-          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 170");
+          //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 170");
                     
           /* Message */
           plen = tlen+tlen_len+1 - ibase;
@@ -244,7 +248,9 @@ void* custom_loop(void *data)
           }          
           if(tmsg)
           {
-            mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 010");
+            cdata->qcnt++;
+            
+            //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 010");
             tmsg->topic = topic;
             tmsg->value = (char*)message;
             tmsg->next = NULL;
@@ -265,7 +271,7 @@ void* custom_loop(void *data)
             free(message);
           }
 
-          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 020");
+          //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 020");
 
           
           switch(qos)
@@ -279,7 +285,7 @@ void* custom_loop(void *data)
               buf[3] = mid;
               write(fd, buf, 4);
               
-              mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 030");
+              //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 030");
 
               break;
             case 2:
@@ -297,7 +303,7 @@ void* custom_loop(void *data)
         ibuf -= tlen+tlen_len+1;
         memcpy(buf, buf+tlen+tlen_len+1, tlen+tlen_len+1);
         
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 040");
+        //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 040");
         
         /* Controllo se c'è un altro messaggio accodato del quale conosco la lunghezza. */
         tlen_valid = 0;
@@ -317,13 +323,13 @@ void* custom_loop(void *data)
       }
     }
 
-    mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 050");
+    //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 050");
     
     if((fdhttp >= 0) && FD_ISSET(fdhttp, &fds))
     {
       n = http_read(fdhttp, &hmsg);
 
-      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 060");
+      //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 060");
 
 
       if(n == 0)
@@ -333,7 +339,7 @@ void* custom_loop(void *data)
         fdhttp = -1;
         cmsg = NULL;
 
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 070");
+        //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 070");
 
       }
     }
@@ -383,6 +389,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 
 	data->sock = sock[0];
 	data->config = config;
+	data->qcnt = 0;
 	
 	context->sock = sock[1];
 	context->id = client_id;
