@@ -183,7 +183,24 @@ void* custom_loop(void *data)
       
       while(tlen_valid && (ibuf >= (tlen+tlen_len+1)))
       {
-
+        char msglog[40];
+        int j;
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- tlen=%d tlen_len=%d", tlen, tlen_len);
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "--------------------------------");
+        j = 0;
+        for(n=0; n<(tlen+tlen_len+1); n++)
+        {
+          sprintf(msglog+j, "%02x", buf[n]);
+          j += 2;
+          if(j == 32)
+          {
+            mosquitto_log_printf(MOSQ_LOG_NOTICE, msglog);
+            j = 0;
+          }
+        }
+        if(j) mosquitto_log_printf(MOSQ_LOG_NOTICE, msglog);
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "--------------------------------");
+        
         //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 150");
 
         if((buf[0] & 0xF0) == PUBLISH)
