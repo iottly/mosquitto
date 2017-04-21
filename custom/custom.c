@@ -319,7 +319,7 @@ void* custom_loop(void *data)
         
         mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- bufdim:%d last:%d", ibuf, tlen+tlen_len+1);
         
-        memcpy(buf, buf+tlen+tlen_len+1, ibuf-(tlen+tlen_len+1);
+        memcpy(buf, buf+tlen+tlen_len+1, ibuf-(tlen+tlen_len+1));
         ibuf -= tlen+tlen_len+1;
         
         //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 040");
