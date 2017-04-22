@@ -91,15 +91,16 @@ void* custom_loop(void *data)
       }
       
       fdhttp = http_post(cdata->config->post_url, 3, ptopic, pvalue);
+
+      free(pvalue[2]);
+      free(cmsg->topic);
+      free(cmsg->value);
+      
       if(fdhttp < 0)
       {
         cmsg = NULL;
         mosquitto_log_printf(MOSQ_LOG_ERR, "|- HTTP POST failed!");
       }
-
-      free(pvalue[2]);
-      free(cmsg->topic);
-      free(cmsg->value);
     }
     
     fdmax = fd;
@@ -271,9 +272,19 @@ void* custom_loop(void *data)
       if(n == 0)
       {
         mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Code: %d", hmsg.header.code);
-        close(fdhttp);
-        fdhttp = -1;
+        //close(fdhttp);
+        //fdhttp = -1;
         cmsg = NULL;
+      }
+      else if(n < 0)
+      {
+        /* Il socket è stato chiuso dal server */
+        fdhttp = -1;
+        if(cmsg)
+        {
+          mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (180)");
+          cmsg = NULL;
+        }
       }
     }
   }

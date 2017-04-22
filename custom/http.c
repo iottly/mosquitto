@@ -1,12 +1,7 @@
-#ifdef WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +17,8 @@
 #ifndef HTTP_TIME_OUT
 #define HTTP_TIME_OUT 360
 #endif
+
+static int gsd = -1;
 
 /**
  * Parse URL into protocol, hostname and query part; the returned
@@ -117,11 +114,7 @@ int http_connect(struct http_url *hu) {
 		}
 
 		if (connect(sd, p->ai_addr, p->ai_addrlen) < 0) {
-#ifdef WIN32
-			closesocket(sd);
-#else
 			close(sd);
-#endif
 			continue;
 		}
 
@@ -129,11 +122,7 @@ int http_connect(struct http_url *hu) {
 	}
 
 	if (!p && sd > -1) {
-#ifdef WIN32
-		closesocket(sd);
-#else
 		close(sd);
-#endif
 		sd = -1;
 	}
 
@@ -414,6 +403,12 @@ int http_read(int sd, struct http_message *msg) {
 				msg->state.left -= parsed_until - msg->state.offset;
 				msg->state.offset = parsed_until;
 				msg->state.total += msg->length;
+				if ((msg->state.total == msg->header.length) || (msg->state.chunk == 0))
+					/* return 0 for keep-alive connections */
+				{
+					msg->state.offset = NULL;
+					return 0;
+				}
 				return 1;
 			}
 		}
@@ -457,7 +452,9 @@ int http_read(int sd, struct http_message *msg) {
 					size,
 					0)) < 1) {
 				/* bytes == 0 means remote socket was closed */
-				return 0;
+				close(sd);
+				gsd = -1;
+				return -1;
 			}
 
 			append[bytes] = 0;
@@ -495,11 +492,7 @@ Host: ") ||
 Accept: */*\r\n\
 Connection: close\r\n\
 \r\n")) {
-#ifdef WIN32
-		closesocket(sd);
-#else
 		close(sd);
-#endif
 		return -1;
 	}
 
@@ -538,11 +531,14 @@ int http_response(int sd, struct http_message *msg) {
 
 int http_post(const char *url, int ndata, char **topic, char **value) {
 	struct http_url *hu;
-	int sd, i, len;
+	int i, len;
 	char content_length[16], *content;
-
-	if (!(hu = http_parse_url(url)) ||
-			(sd = http_connect(hu)) < 0) {
+	
+	if (!(hu = http_parse_url(url))) {
+		return -1;
+	}
+	
+	if ((gsd < 0) && (gsd = http_connect(hu)) < 0) {
 		/* it's save to free NULL */
 		free(hu);
 		return -1;
@@ -570,31 +566,30 @@ int http_post(const char *url, int ndata, char **topic, char **value) {
         sprintf(content+strlen(content), "--" MULTIPART_BOUNDARY "--\r\n");
         
 	/* this way even very very long query strings won't be a problem */
-	if (http_send(sd, "POST /") ||
-			http_send(sd, hu->query) ||
-			http_send(sd, " HTTP/1.1\r\n\
+	if (http_send(gsd, "POST /") ||
+			http_send(gsd, hu->query) ||
+			http_send(gsd, " HTTP/1.1\r\n\
 User-Agent: "HTTP_USER_AGENT"\r\n\
 Host: ") ||
-			http_send(sd, hu->host) ||
-			http_send(sd, "\r\n\
+			http_send(gsd, hu->host) ||
+			http_send(gsd, "\r\n\
 Accept: */*\r\n\
 Content-Length: ") ||
-			http_send(sd, content_length) ||
-			http_send(sd, "Content-Type: multipart/form-data;; boundary=" MULTIPART_BOUNDARY "\r\n\
-Connection: close\r\n\
+			http_send(gsd, content_length) ||
+			http_send(gsd, "Content-Type: multipart/form-data;; boundary=" MULTIPART_BOUNDARY "\r\n\
+Connection: keep-alive\r\n\
 \r\n") ||
-			http_send(sd, content)) {
-#ifdef WIN32
-		closesocket(sd);
-#else
-		close(sd);
-#endif
+			http_send(gsd, content)) {
+		close(gsd);
+		free(content);
+		free(hu);
 		return -1;
 	}
 
+	free(content);
 	free(hu);
 
-	return sd;
+	return gsd;
 }
 
 
