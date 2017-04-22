@@ -17,7 +17,6 @@
 struct custom_data {
   struct mqtt3_config *config;
   int sock;
-  int qcnt;
 };
 
 struct msglist {
@@ -48,16 +47,11 @@ void* custom_loop(void *data)
   while(1)
   {
 
-    //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 080");
-
     if(!cmsg && msg_head)
     {
       cmsg = msg_head;
       msg_head = msg_head->next;
       if(!msg_head) msg_tail = NULL;
-      
-      cdata->qcnt--;
-      mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 082 - queue len %d", cdata->qcnt);
       
       memset(&hmsg, 0, sizeof(struct http_message));
       ptopic[0] = "from";
@@ -68,16 +62,13 @@ void* custom_loop(void *data)
       if(cdata->config->post_header)
       {
         pvalue[2] = malloc(strlen(cdata->config->post_header)+strlen(cmsg->value)+2);
-        if (errno==ENOMEM) {
-          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 085 - ENOMEM");
-        }
         if(pvalue[2] == NULL)
         {
           /* Scarto il messaggio. Sarebbe forse meglio riaccodare e aspettare
              un po' di tempo? Non credo serva, se ormai la lista dei topic da
              inoltrare ha saturato la memoria non ho più modo di liberarla se
              non scartando i messaggi da qui. */
-          mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped!");
+          mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (85)");
           free(cmsg->topic);
           free(cmsg->value);
           cmsg = NULL;
@@ -86,16 +77,13 @@ void* custom_loop(void *data)
         strcpy(pvalue[2], cdata->config->post_header);
         strcat(pvalue[2], " ");
         strcat(pvalue[2], cmsg->value);
-
-        //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 090");
-
       }
       else
       {
         pvalue[2] = strdup(cmsg->value);
         if(pvalue[2] == NULL)
         {
-          mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped!");
+          mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (90)");
           free(cmsg->topic);
           free(cmsg->value);
           cmsg = NULL;
@@ -108,23 +96,15 @@ void* custom_loop(void *data)
         cmsg = NULL;
         mosquitto_log_printf(MOSQ_LOG_ERR, "|- HTTP POST failed!");
       }
-      
-      //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 100");
 
       free(pvalue[2]);
       free(cmsg->topic);
       free(cmsg->value);
-
-      //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 110");
-
     }
     
     fdmax = fd;
     FD_SET(fd, &fds);
-
-    //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 120");
-
-
+    
     if(fdhttp >= 0)
     {
       FD_SET(fdhttp, &fds);
@@ -134,8 +114,6 @@ void* custom_loop(void *data)
     
     if(n < 0)
     {
-      /* Questo log va rimosso appena soddisfatti della soluzione */
-      mosquitto_log_printf(MOSQ_LOG_WARNING, "**** WARNING - select returned errno %d ****", errno);
       if(errno == EINTR) continue;
       mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit ****");
       /* Forse meglio uccidere tutto mosquitto? Con "exit(0)". */
@@ -145,20 +123,11 @@ void* custom_loop(void *data)
     if(FD_ISSET(fd, &fds))
     {
       n = read(fd, buf+ibuf, sizeof(buf)-ibuf);
-
-      //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 130");
-
-
-      //printf("read: %d\n", n);
       if(n <= 0)
       {
         mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit ****");
         return NULL;
       }
-      
-      //for(i=0; i<n; i++) printf("%02x", buf[i+ibuf]);
-      //printf("\n");
-      
       ibuf += n;
       
       /* Verifica se ho tutti i byte per tlen e calcola la base
@@ -177,32 +146,9 @@ void* custom_loop(void *data)
           }
         }
       }
-
-      //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 140");
-
       
       while(tlen_valid && (ibuf >= (tlen+tlen_len+1)))
       {
-        char msglog[40];
-        int j;
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- tlen=%d tlen_len=%d", tlen, tlen_len);
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "--------------------------------");
-        j = 0;
-        for(n=0; n<(tlen+tlen_len+1); n++)
-        {
-          sprintf(msglog+j, "%02x", buf[n]);
-          j += 2;
-          if(j == 32)
-          {
-            mosquitto_log_printf(MOSQ_LOG_NOTICE, msglog);
-            j = 0;
-          }
-        }
-        if(j) mosquitto_log_printf(MOSQ_LOG_NOTICE, msglog);
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "--------------------------------");
-        
-        //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 150");
-
         if((buf[0] & 0xF0) == PUBLISH)
         {
           /* QoS */
@@ -211,20 +157,15 @@ void* custom_loop(void *data)
           /* Topic */
           len = (buf[tlen_len+1]<<8) + buf[tlen_len+2];
           topic = malloc(len+1);
-          if (errno==ENOMEM) {
-            mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 155 - ENOMEM");
-          }
           if(topic == NULL)
           {
-            mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped!");
+            mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (155)");
 #warning Rispondere NAK se QoS > 0
             break;
           }
           memcpy(topic, buf+tlen_len+3, len);
           topic[len] = 0;
 
-          //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 160");
-          
           /* Message ID */
           mid = 0;
           ibase = len+tlen_len+3;
@@ -234,18 +175,13 @@ void* custom_loop(void *data)
             ibase += 2;
           }
 
-          //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 170");
-                    
           /* Message */
           plen = tlen+tlen_len+1 - ibase;
           message = malloc(plen+1);
-          if (errno==ENOMEM) {
-            mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 175 - ENOMEM");
-          }
           if(message == NULL)
           {
             free(topic);
-            mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped!");
+            mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (175)");
 #warning Rispondere NAK se QoS > 0
             break;
           }
@@ -260,14 +196,8 @@ void* custom_loop(void *data)
           mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d", qos, mid, topic, plen);
           
           tmsg = malloc(sizeof(struct msglist));
-          if (errno==ENOMEM) {
-            mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 176 - ENOMEM");
-          }          
           if(tmsg)
           {
-            cdata->qcnt++;
-            
-            //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 010");
             tmsg->topic = topic;
             tmsg->value = (char*)message;
             tmsg->next = NULL;
@@ -284,12 +214,11 @@ void* custom_loop(void *data)
           }
           else
           {
+            mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (176)");
+            
             free(topic);
             free(message);
           }
-
-          //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 020");
-
           
           switch(qos)
           {
@@ -301,9 +230,6 @@ void* custom_loop(void *data)
               buf[2] = mid>>8;
               buf[3] = mid;
               write(fd, buf, 4);
-              
-              //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 030");
-
               break;
             case 2:
               /* Da gestire, ma per ora i topic li registro massimo QoS 1 */
@@ -317,12 +243,8 @@ void* custom_loop(void *data)
           */
         }
         
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- bufdim:%d last:%d", ibuf, tlen+tlen_len+1);
-        
         memcpy(buf, buf+tlen+tlen_len+1, ibuf-(tlen+tlen_len+1));
         ibuf -= tlen+tlen_len+1;
-        
-        //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 040");
         
         /* Controllo se c'è un altro messaggio accodato del quale conosco la lunghezza. */
         tlen_valid = 0;
@@ -342,14 +264,9 @@ void* custom_loop(void *data)
       }
     }
 
-    //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 050");
-    
     if((fdhttp >= 0) && FD_ISSET(fdhttp, &fds))
     {
       n = http_read(fdhttp, &hmsg);
-
-      //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 060");
-
 
       if(n == 0)
       {
@@ -357,9 +274,6 @@ void* custom_loop(void *data)
         close(fdhttp);
         fdhttp = -1;
         cmsg = NULL;
-
-        //mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- 070");
-
       }
     }
   }
@@ -395,9 +309,6 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	
 	socketpair(AF_LOCAL, SOCK_STREAM, 0, sock);
 	data = malloc(sizeof(struct custom_data));
-  if (errno==ENOMEM) {
-    mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- custom_init - ENOMEM");
-  }          
 	if(data == NULL)
 	{
 	  free(client_id);
@@ -408,7 +319,6 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 
 	data->sock = sock[0];
 	data->config = config;
-	data->qcnt = 0;
 	
 	context->sock = sock[1];
 	context->id = client_id;
