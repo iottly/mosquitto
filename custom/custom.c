@@ -22,13 +22,15 @@ struct custom_data {
 struct msglist {
   char *topic;
   char *value;
+  int qos;
+  int mid;
   struct msglist *next;
 } *msg_head, *msg_tail;
 
 void* custom_loop(void *data)
 {
   struct custom_data *cdata = data;
-  unsigned char buf[1024], *message;
+  unsigned char buf[1024], puback[4], *message;
   int fd, fdhttp, fdmax, n, /*i,*/ ibuf, ibase;
   int qos, mid, len, tlen, tlen_len, tlen_valid, plen;
   fd_set fds;
@@ -201,6 +203,8 @@ void* custom_loop(void *data)
           {
             tmsg->topic = topic;
             tmsg->value = (char*)message;
+            tmsg->qos = qos;
+            tmsg->mid = mid;
             tmsg->next = NULL;
             if(!msg_head)
             {
@@ -220,28 +224,6 @@ void* custom_loop(void *data)
             free(topic);
             free(message);
           }
-          
-          switch(qos)
-          {
-            case 1:
-#warning Qualcosa da rivedere
-              /* La riposta è corretta ma a mosquitto non piace, verificare la registrazione dei topic */
-              buf[0] = PUBACK | (1<<1);
-              buf[1] = 2;
-              buf[2] = mid>>8;
-              buf[3] = mid;
-              write(fd, buf, 4);
-              break;
-            case 2:
-              /* Da gestire, ma per ora i topic li registro massimo QoS 1 */
-              break;
-            default:
-              break;
-          }
-          
-          /* if(qos == 2) _mosquitto_send_pubrec(context, mid);
-               ... che a sua volta riceve PUBREL che richiede il PUBCOMP.
-          */
         }
         
         memcpy(buf, buf+tlen+tlen_len+1, ibuf-(tlen+tlen_len+1));
@@ -272,8 +254,18 @@ void* custom_loop(void *data)
       if(n == 0)
       {
         mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Code: %d", hmsg.header.code);
-        //close(fdhttp);
-        //fdhttp = -1;
+        if((hmsg.header.code == 200) && (cmsg->qos == 1))
+        {
+          /* Invia il PUBACK al sender */
+          puback[0] = PUBACK | (1<<1);	// PUBACK + QoS 1
+          puback[1] = 2;
+          puback[2] = cmsg->mid>>8;
+          puback[3] = cmsg->mid;
+          write(fd, puback, 4);
+        }
+        /* if(qos == 2) _mosquitto_send_pubrec(context, mid);
+             ... che a sua volta riceve PUBREL che richiede il PUBCOMP.
+        */
         cmsg = NULL;
       }
       else if(n < 0)
@@ -348,6 +340,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	HASH_ADD_KEYPTR(hh_id, db->contexts_by_id, context->id, strlen(context->id), context);
 	HASH_ADD(hh_sock, db->contexts_by_sock, sock, sizeof(context->sock), context);
 	context->state = mosq_cs_connected;
+	context->in_packet.remaining_mult = 1;
 	
 	for(i=0; i<config->post_topic_num; i++)
 	{
