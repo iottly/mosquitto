@@ -73,6 +73,7 @@ void* custom_loop(void *data)
           mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (85)");
           free(cmsg->topic);
           free(cmsg->value);
+          free(cmsg);
           cmsg = NULL;
         }
         
@@ -88,6 +89,7 @@ void* custom_loop(void *data)
           mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (90)");
           free(cmsg->topic);
           free(cmsg->value);
+          free(cmsg);
           cmsg = NULL;
         }
       }
@@ -100,6 +102,7 @@ void* custom_loop(void *data)
       
       if(fdhttp < 0)
       {
+        free(cmsg);
         cmsg = NULL;
         mosquitto_log_printf(MOSQ_LOG_ERR, "|- HTTP POST failed!");
       }
@@ -266,6 +269,7 @@ void* custom_loop(void *data)
         /* if(qos == 2) _mosquitto_send_pubrec(context, mid);
              ... che a sua volta riceve PUBREL che richiede il PUBCOMP.
         */
+        free(cmsg);
         cmsg = NULL;
       }
       else if(n < 0)
@@ -275,6 +279,7 @@ void* custom_loop(void *data)
         if(cmsg)
         {
           mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (180)");
+          free(cmsg);
           cmsg = NULL;
         }
       }
