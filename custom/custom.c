@@ -24,6 +24,7 @@ struct msglist {
   char *value;
   int qos;
   int mid;
+  int done;
   struct msglist *next;
 } *msg_head, *msg_tail;
 
@@ -48,7 +49,6 @@ void* custom_loop(void *data)
   FD_ZERO(&fds);
   while(1)
   {
-
     if(!cmsg && msg_head)
     {
       cmsg = msg_head;
@@ -73,6 +73,7 @@ void* custom_loop(void *data)
           mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (85)");
           free(cmsg->topic);
           free(cmsg->value);
+          free(cmsg);
           cmsg = NULL;
         }
         
@@ -88,6 +89,7 @@ void* custom_loop(void *data)
           mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (90)");
           free(cmsg->topic);
           free(cmsg->value);
+          free(cmsg);
           cmsg = NULL;
         }
       }
@@ -100,6 +102,7 @@ void* custom_loop(void *data)
       
       if(fdhttp < 0)
       {
+        free(cmsg);
         cmsg = NULL;
         mosquitto_log_printf(MOSQ_LOG_ERR, "|- HTTP POST failed!");
       }
@@ -118,7 +121,7 @@ void* custom_loop(void *data)
     if(n < 0)
     {
       if(errno == EINTR) continue;
-      mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit ****");
+      mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit (%d) ****", errno);
       /* Forse meglio uccidere tutto mosquitto? Con "exit(0)". */
       return NULL;
     }
@@ -205,6 +208,7 @@ void* custom_loop(void *data)
             tmsg->value = (char*)message;
             tmsg->qos = qos;
             tmsg->mid = mid;
+            tmsg->done = 0;
             tmsg->next = NULL;
             if(!msg_head)
             {
@@ -266,15 +270,25 @@ void* custom_loop(void *data)
         /* if(qos == 2) _mosquitto_send_pubrec(context, mid);
              ... che a sua volta riceve PUBREL che richiede il PUBCOMP.
         */
-        cmsg = NULL;
+        //free(cmsg);
+        //cmsg = NULL;
+        cmsg->done = 1;
+        shutdown(fdhttp, 2);
       }
       else if(n < 0)
       {
-        /* Il socket è stato chiuso dal server */
+        if(cmsg->done)
+        {
+          close(fdhttp);
+          free(cmsg);
+          cmsg = NULL;
+        }
         fdhttp = -1;
         if(cmsg)
         {
+          /* Il socket è stato chiuso dal server */
           mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (180)");
+          free(cmsg);
           cmsg = NULL;
         }
       }
