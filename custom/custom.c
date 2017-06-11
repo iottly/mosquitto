@@ -31,8 +31,8 @@ struct msglist {
 void* custom_loop(void *data)
 {
   struct custom_data *cdata = data;
-  unsigned char buf[1024], puback[4], *message;
-  int fd, fdhttp, fdmax, n, /*i,*/ ibuf, ibase;
+  unsigned char *buf, puback[4], *message;
+  int fd, fdhttp, fdmax, n, /*i,*/ lbuf, ibuf, ibase;
   int qos, mid, len, tlen, tlen_len, tlen_valid, plen;
   fd_set fds;
   char *topic;
@@ -42,6 +42,8 @@ void* custom_loop(void *data)
   struct http_message hmsg;
 	
   ibuf = 0;
+  lbuf = 1024;
+  buf = malloc(lbuf);
   cmsg = NULL;
   fdhttp = -1;
   
@@ -128,7 +130,7 @@ void* custom_loop(void *data)
     
     if(FD_ISSET(fd, &fds))
     {
-      n = read(fd, buf+ibuf, sizeof(buf)-ibuf);
+      n = read(fd, buf+ibuf, lbuf-ibuf);
       if(n <= 0)
       {
         mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit ****");
@@ -150,6 +152,18 @@ void* custom_loop(void *data)
             tlen_valid = 1;
             break;
           }
+        }
+      }
+      
+      if((tlen+tlen_len+1) > lbuf)
+      {
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- Recv buffer realloc (%d->%d) ****", lbuf, ((tlen+tlen_len+1)+1023) & ~0x3ff);
+        lbuf = ((tlen+tlen_len+1)+1023) & ~0x3ff;
+        buf = realloc(buf, lbuf);
+        if(!buf)
+        {
+          mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - realloc error - exit ****");
+          return NULL;
         }
       }
       
