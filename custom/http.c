@@ -576,9 +576,8 @@ Host: ") ||
 Accept: */*\r\n\
 Content-Length: ") ||
 			http_send(gsd, content_length) ||
-			http_send(gsd, "Content-Type: multipart/form-data;; boundary=" MULTIPART_BOUNDARY "\r\n"\
-/*"Connection: keep-alive\r\n\*/
-"Connection: close\r\n\
+			http_send(gsd, "Content-Type: multipart/form-data;; boundary=" MULTIPART_BOUNDARY "\r\n\
+Connection: keep-alive\r\n\
 \r\n") ||
 			http_send(gsd, content)) {
 		close(gsd);
