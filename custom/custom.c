@@ -24,14 +24,15 @@ struct msglist {
   char *value;
   int qos;
   int mid;
+  int done;
   struct msglist *next;
 } *msg_head, *msg_tail;
 
 void* custom_loop(void *data)
 {
   struct custom_data *cdata = data;
-  unsigned char buf[1024], puback[4], *message;
-  int fd, fdhttp, fdmax, n, /*i,*/ ibuf, ibase;
+  unsigned char *buf, puback[4], *message;
+  int fd, fdhttp, fdmax, n, /*i,*/ lbuf, ibuf, ibase;
   int qos, mid, len, tlen, tlen_len, tlen_valid, plen;
   fd_set fds;
   char *topic;
@@ -41,6 +42,8 @@ void* custom_loop(void *data)
   struct http_message hmsg;
 	
   ibuf = 0;
+  lbuf = 1024;
+  buf = malloc(lbuf);
   cmsg = NULL;
   fdhttp = -1;
   
@@ -48,7 +51,6 @@ void* custom_loop(void *data)
   FD_ZERO(&fds);
   while(1)
   {
-
     if(!cmsg && msg_head)
     {
       cmsg = msg_head;
@@ -121,14 +123,14 @@ void* custom_loop(void *data)
     if(n < 0)
     {
       if(errno == EINTR) continue;
-      mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit ****");
+      mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit (%d) ****", errno);
       /* Forse meglio uccidere tutto mosquitto? Con "exit(0)". */
       return NULL;
     }
     
     if(FD_ISSET(fd, &fds))
     {
-      n = read(fd, buf+ibuf, sizeof(buf)-ibuf);
+      n = read(fd, buf+ibuf, lbuf-ibuf);
       if(n <= 0)
       {
         mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit ****");
@@ -150,6 +152,18 @@ void* custom_loop(void *data)
             tlen_valid = 1;
             break;
           }
+        }
+      }
+      
+      if((tlen+tlen_len+1) > lbuf)
+      {
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- Recv buffer realloc (%d->%d) ****", lbuf, ((tlen+tlen_len+1)+1023) & ~0x3ff);
+        lbuf = ((tlen+tlen_len+1)+1023) & ~0x3ff;
+        buf = realloc(buf, lbuf);
+        if(!buf)
+        {
+          mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - realloc error - exit ****");
+          return NULL;
         }
       }
       
@@ -208,6 +222,7 @@ void* custom_loop(void *data)
             tmsg->value = (char*)message;
             tmsg->qos = qos;
             tmsg->mid = mid;
+            tmsg->done = 0;
             tmsg->next = NULL;
             if(!msg_head)
             {
@@ -269,15 +284,23 @@ void* custom_loop(void *data)
         /* if(qos == 2) _mosquitto_send_pubrec(context, mid);
              ... che a sua volta riceve PUBREL che richiede il PUBCOMP.
         */
-        free(cmsg);
-        cmsg = NULL;
+        //free(cmsg);
+        //cmsg = NULL;
+        cmsg->done = 1;
+        shutdown(fdhttp, 2);
       }
       else if(n < 0)
       {
-        /* Il socket è stato chiuso dal server */
+        if(cmsg->done)
+        {
+          close(fdhttp);
+          free(cmsg);
+          cmsg = NULL;
+        }
         fdhttp = -1;
         if(cmsg)
         {
+          /* Il socket è stato chiuso dal server */
           mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (180)");
           free(cmsg);
           cmsg = NULL;
