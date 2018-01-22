@@ -183,6 +183,7 @@ void mqtt3_config_init(struct mqtt3_config *config)
 	config->default_listener.client_count = 0;
 	config->default_listener.protocol = mp_mqtt;
 	config->default_listener.use_username_as_clientid = false;
+	config->default_listener.use_clientid_as_username = false;
 #ifdef WITH_TLS
 	config->default_listener.tls_version = NULL;
 	config->default_listener.cafile = NULL;
@@ -386,7 +387,8 @@ int mqtt3_config_parse_args(struct mqtt3_config *config, int argc, char *argv[])
 			|| config->default_listener.require_certificate
 			|| config->default_listener.crlfile
 			|| config->default_listener.use_identity_as_username
-#endif
+#endif			
+			|| config->default_listener.use_clientid_as_username
 			|| config->default_listener.use_username_as_clientid
 			|| config->default_listener.host
 			|| config->default_listener.port
@@ -423,6 +425,7 @@ int mqtt3_config_parse_args(struct mqtt3_config *config, int argc, char *argv[])
 		config->listeners[config->listener_count-1].sock_count = 0;
 		config->listeners[config->listener_count-1].client_count = 0;
 		config->listeners[config->listener_count-1].use_username_as_clientid = config->default_listener.use_username_as_clientid;
+		config->listeners[config->listener_count-1].use_clientid_as_username = config->default_listener.use_clientid_as_username;
 #ifdef WITH_TLS
 		config->listeners[config->listener_count-1].tls_version = config->default_listener.tls_version;
 		config->listeners[config->listener_count-1].cafile = config->default_listener.cafile;
@@ -1751,6 +1754,9 @@ int _config_read_file_core(struct mqtt3_config *config, bool reload, const char 
 				}else if(!strcmp(token, "use_username_as_clientid")){
 					if(reload) continue; // Listeners not valid for reloading.
 					if(_conf_parse_bool(&token, "use_username_as_clientid", &cur_listener->use_username_as_clientid, saveptr)) return MOSQ_ERR_INVAL;
+				}else if(!strcmp(token, "use_clientid_as_username")){
+					if(reload) continue; // Listeners not valid for reloading.
+					if(_conf_parse_bool(&token, "use_clientid_as_username", &cur_listener->use_clientid_as_username, saveptr)) return MOSQ_ERR_INVAL;
 				}else if(!strcmp(token, "username") || !strcmp(token, "remote_username")){
 #ifdef WITH_BRIDGE
 					if(reload) continue; // FIXME

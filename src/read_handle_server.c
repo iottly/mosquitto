@@ -182,8 +182,11 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 	}
 	will_retain = ((connect_flags & 0x20) == 0x20); // Temporary hack because MSVC<1800 doesn't have stdbool.h.
 	password_flag = connect_flags & 0x40;
-	username_flag = connect_flags & 0x80;
-
+	if (context->listener->use_clientid_as_username) {
+		username_flag = 0x80;
+	} else {
+		username_flag = connect_flags & 0x80;
+	}
 	if(_mosquitto_read_uint16(&context->in_packet, &(context->keepalive))){
 		rc = 1;
 		goto handle_connect_error;
@@ -311,10 +314,20 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 		}else{
 			if(context->protocol == mosq_p_mqtt31){
 				/* Username flag given, but no username. Ignore. */
-				username_flag = 0;
+				if (context->listener->use_clientid_as_username) {
+					_mosquitto_free(username);
+					username = _mosquitto_strdup(client_id);
+				} else {
+					username_flag = 0;
+				}
 			}else if(context->protocol == mosq_p_mqtt311){
-				rc = MOSQ_ERR_PROTOCOL;
-				goto handle_connect_error;
+				if (context->listener->use_clientid_as_username) {
+					_mosquitto_free(username);
+					username = _mosquitto_strdup(client_id);
+				} else {
+					rc = MOSQ_ERR_PROTOCOL;
+					goto handle_connect_error;
+				}				
 			}
 		}
 	}else{
