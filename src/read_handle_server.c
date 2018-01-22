@@ -315,14 +315,16 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 			if(context->protocol == mosq_p_mqtt31){
 				/* Username flag given, but no username. Ignore. */
 				if (context->listener->use_clientid_as_username) {
-					_mosquitto_free(username);
+					//_mosquitto_free(username);
+					username = NULL; /* Avoid free() in error: below. */
 					username = _mosquitto_strdup(client_id);
 				} else {
 					username_flag = 0;
 				}
 			}else if(context->protocol == mosq_p_mqtt311){
 				if (context->listener->use_clientid_as_username) {
-					_mosquitto_free(username);
+					//_mosquitto_free(username);
+					username = NULL; /* Avoid free() in error: below. */
 					username = _mosquitto_strdup(client_id);
 				} else {
 					rc = MOSQ_ERR_PROTOCOL;
@@ -390,7 +392,11 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 	}else{
 #endif /* WITH_TLS */
 		if(username_flag){
-			rc = mosquitto_unpwd_check(db, username, password);
+			if (context->listener->use_clientid_as_username) {
+				rc = MOSQ_ERR_SUCCESS;
+			} else {
+				rc = mosquitto_unpwd_check(db, username, password);
+			}
 			switch(rc){
 				case MOSQ_ERR_SUCCESS:
 					break;
