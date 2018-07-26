@@ -2,12 +2,13 @@
 #include "mqtt3_protocol.h"
 #include "http.h"
 /* Viene incluso "dummypthread.h", ma devo usare la libreria reale */
-#undef pthread_create 
+#undef pthread_create
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <pthread.h>
 #include <sys/select.h>
+#include <sys/time.h>
 
 #include <errno.h>
 
@@ -26,7 +27,11 @@ struct msglist {
   int mid;
   int done;
   struct msglist *next;
+  struct timeval post_time;
 } *msg_head, *msg_tail;
+
+struct timeval now;
+double elapsedTime;
 
 void* custom_loop(void *data)
 {
@@ -40,13 +45,13 @@ void* custom_loop(void *data)
   char *ptopic[3];
   char *pvalue[3];
   struct http_message hmsg;
-	
+
   ibuf = 0;
   lbuf = 1024;
   buf = malloc(lbuf);
   cmsg = NULL;
   fdhttp = -1;
-  
+
   fd = cdata->sock;
   FD_ZERO(&fds);
   while(1)
@@ -56,7 +61,7 @@ void* custom_loop(void *data)
       cmsg = msg_head;
       msg_head = msg_head->next;
       if(!msg_head) msg_tail = NULL;
-      
+
       memset(&hmsg, 0, sizeof(struct http_message));
       ptopic[0] = "from";
       pvalue[0] = cmsg->topic;
@@ -78,7 +83,7 @@ void* custom_loop(void *data)
           free(cmsg);
           cmsg = NULL;
         }
-        
+
         strcpy(pvalue[2], cdata->config->post_header);
         strcat(pvalue[2], " ");
         strcat(pvalue[2], cmsg->value);
@@ -95,13 +100,14 @@ void* custom_loop(void *data)
           cmsg = NULL;
         }
       }
-      
+
       fdhttp = http_post(cdata->config->post_url, 3, ptopic, pvalue);
 
       free(pvalue[2]);
       free(cmsg->topic);
       free(cmsg->value);
-      
+      gettimeofday(&(cmsg->post_time), NULL);
+
       if(fdhttp < 0)
       {
         free(cmsg);
@@ -109,17 +115,17 @@ void* custom_loop(void *data)
         mosquitto_log_printf(MOSQ_LOG_ERR, "|- HTTP POST failed!");
       }
     }
-    
+
     fdmax = fd;
     FD_SET(fd, &fds);
-    
+
     if(fdhttp >= 0)
     {
       FD_SET(fdhttp, &fds);
       if(fdhttp > fdmax) fdmax = fdhttp;
     }
     n = select(fdmax+1, &fds, NULL, NULL, NULL);
-    
+
     if(n < 0)
     {
       if(errno == EINTR) continue;
@@ -127,7 +133,7 @@ void* custom_loop(void *data)
       /* Forse meglio uccidere tutto mosquitto? Con "exit(0)". */
       return NULL;
     }
-    
+
     if(FD_ISSET(fd, &fds))
     {
       n = read(fd, buf+ibuf, lbuf-ibuf);
@@ -137,7 +143,7 @@ void* custom_loop(void *data)
         return NULL;
       }
       ibuf += n;
-      
+
       /* Verifica se ho tutti i byte per tlen e calcola la base
          di partenza del messaggio. */
       tlen_valid = 0;
@@ -154,7 +160,7 @@ void* custom_loop(void *data)
           }
         }
       }
-      
+
       if((tlen+tlen_len+1) > lbuf)
       {
         mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- Recv buffer realloc (%d->%d) ****", lbuf, ((tlen+tlen_len+1)+1023) & ~0x3ff);
@@ -166,14 +172,14 @@ void* custom_loop(void *data)
           return NULL;
         }
       }
-      
+
       while(tlen_valid && (ibuf >= (tlen+tlen_len+1)))
       {
         if((buf[0] & 0xF0) == PUBLISH)
         {
           /* QoS */
           qos = (buf[0] & 0x06) >> 1;
-          
+
           /* Topic */
           len = (buf[tlen_len+1]<<8) + buf[tlen_len+2];
           topic = malloc(len+1);
@@ -207,14 +213,14 @@ void* custom_loop(void *data)
           }
           memcpy(message, buf+ibase, plen);
           message[plen] = 0;
-          
+
           /* Stampa dei dati ricevuti -- DA SOSTITUIRE CON CODICE REALE */
           /* Nota: il QoS ricevuto è sempre 0, anche se il messaggio di origine aveva QoS maggiori */
           //printf("** PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d\n** payload=", qos, mid, topic, plen);
           //for(i=0; i<plen; i++) printf("%02x", message[i]);
           //printf("\n");
           mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d", qos, mid, topic, plen);
-          
+
           tmsg = malloc(sizeof(struct msglist));
           if(tmsg)
           {
@@ -238,15 +244,15 @@ void* custom_loop(void *data)
           else
           {
             mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (176)");
-            
+
             free(topic);
             free(message);
           }
         }
-        
+
         memcpy(buf, buf+tlen+tlen_len+1, ibuf-(tlen+tlen_len+1));
         ibuf -= tlen+tlen_len+1;
-        
+
         /* Controllo se c'è un altro messaggio accodato del quale conosco la lunghezza. */
         tlen_valid = 0;
         tlen = 0;
@@ -271,7 +277,12 @@ void* custom_loop(void *data)
 
       if(n == 0)
       {
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Code: %d", hmsg.header.code);
+        gettimeofday(&now, NULL);
+        elapsedTime = (now.tv_sec - cmsg->post_time.tv_sec) * 1000.0;      // sec to ms
+        elapsedTime += (now.tv_usec - cmsg->post_time.tv_usec) / 1000.0;   // us to ms
+
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Code: %d -- elapsed: %f", hmsg.header.code, elapsedTime);
+        
         if((hmsg.header.code == 200) && (cmsg->qos == 1))
         {
           /* Invia il PUBACK al sender */
@@ -281,6 +292,7 @@ void* custom_loop(void *data)
           puback[3] = cmsg->mid;
           write(fd, puback, 4);
         }
+
         /* if(qos == 2) _mosquitto_send_pubrec(context, mid);
              ... che a sua volta riceve PUBREL che richiede il PUBCOMP.
         */
@@ -318,16 +330,16 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	pthread_t p;
 	struct custom_data *data;
 	struct _mosquitto_acl *acl;
-	
+
 	msg_head = msg_tail = NULL;
-	
+
 	client_id = strdup(config->post_clientid);
 	if(client_id == NULL)
 	{
 	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
 	  return -1;
 	}
-	
+
 	context = calloc(1, sizeof(struct mosquitto));
 	if(context == NULL)
 	{
@@ -335,9 +347,9 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
 	  return -1;
 	}
-	
+
 	mosquitto_log_printf(MOSQ_LOG_NOTICE, "Custom client connected as id '%s'.", client_id);
-	
+
 	socketpair(AF_LOCAL, SOCK_STREAM, 0, sock);
 	data = malloc(sizeof(struct custom_data));
 	if(data == NULL)
@@ -350,7 +362,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 
 	data->sock = sock[0];
 	data->config = config;
-	
+
 	context->sock = sock[1];
 	context->id = client_id;
 	/* Da popolare con la lista dei topic sottoscritti */
@@ -363,18 +375,18 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
 	  return -1;
 	}
-	
-	
+
+
 	HASH_ADD_KEYPTR(hh_id, db->contexts_by_id, context->id, strlen(context->id), context);
 	HASH_ADD(hh_sock, db->contexts_by_sock, sock, sizeof(context->sock), context);
 	context->state = mosq_cs_connected;
 	context->in_packet.remaining_mult = 1;
-	
+
 	for(i=0; i<config->post_topic_num; i++)
 	{
 		ret = mqtt3_sub_add(db, context, config->post_topic[i], config->post_topic_qos[i], &db->subs);
 		mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Subscribing '%s' QoS=%d (%d)", config->post_topic[i], config->post_topic_qos[i], ret);
-		
+
 		/* Popolo la lista ACL con i topic registrati. */
 		acl = calloc(1, sizeof(struct _mosquitto_acl));
 		if(acl == NULL)
@@ -392,7 +404,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 		  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
 		  return -1;
 		}
-		
+
 		acl->topic = config->post_topic[i];
 		acl->access = 1;
 		acl->next = context->acl_list->acl;
@@ -401,7 +413,6 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 
 	pthread_create(&p, NULL, custom_loop, data);
 	pthread_detach(p);
-	
+
 	return 0;
 }
-
