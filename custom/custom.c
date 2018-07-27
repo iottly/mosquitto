@@ -219,7 +219,7 @@ void* custom_loop(void *data)
           //printf("** PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d\n** payload=", qos, mid, topic, plen);
           //for(i=0; i<plen; i++) printf("%02x", message[i]);
           //printf("\n");
-          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d", qos, mid, topic, plen);
+          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- PUBLISH MID=%d plen=%d QoS=%d topic='%s'", mid, plen, qos, topic);
 
           tmsg = malloc(sizeof(struct msglist));
           if(tmsg)
@@ -281,8 +281,8 @@ void* custom_loop(void *data)
         elapsedTime = (now.tv_sec - cmsg->post_time.tv_sec) * 1000.0;      // sec to ms
         elapsedTime += (now.tv_usec - cmsg->post_time.tv_usec) / 1000.0;   // us to ms
 
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Code: %d -- elapsed: %f", hmsg.header.code, elapsedTime);
-        
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- POST MID=%d Code=%d Elapsedms=%f", cmsg->mid, hmsg.header.code, elapsedTime);
+
         if((hmsg.header.code == 200) && (cmsg->qos == 1))
         {
           /* Invia il PUBACK al sender */
