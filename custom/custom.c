@@ -77,7 +77,7 @@ void* custom_loop(void *data)
              un po' di tempo? Non credo serva, se ormai la lista dei topic da
              inoltrare ha saturato la memoria non ho più modo di liberarla se
              non scartando i messaggi da qui. */
-          mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (85)");
+          mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - DROP - Message dropped! (85)");
           free(cmsg->topic);
           free(cmsg->value);
           free(cmsg);
@@ -93,7 +93,7 @@ void* custom_loop(void *data)
         pvalue[2] = strdup(cmsg->value);
         if(pvalue[2] == NULL)
         {
-          mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (90)");
+          mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - DROP - Message dropped! (90)");
           free(cmsg->topic);
           free(cmsg->value);
           free(cmsg);
@@ -112,7 +112,7 @@ void* custom_loop(void *data)
       {
         free(cmsg);
         cmsg = NULL;
-        mosquitto_log_printf(MOSQ_LOG_ERR, "|- HTTP POST failed!");
+        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - POSTFAIL - HTTP POST failed!");
       }
     }
 
@@ -129,7 +129,7 @@ void* custom_loop(void *data)
     if(n < 0)
     {
       if(errno == EINTR) continue;
-      mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit (%d) ****", errno);
+      mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ERROR - loop custom exit (%d) ****", errno);
       /* Forse meglio uccidere tutto mosquitto? Con "exit(0)". */
       return NULL;
     }
@@ -139,7 +139,7 @@ void* custom_loop(void *data)
       n = read(fd, buf+ibuf, lbuf-ibuf);
       if(n <= 0)
       {
-        mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - loop custom exit ****");
+        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ERROR - loop custom exit ****");
         return NULL;
       }
       ibuf += n;
@@ -163,12 +163,12 @@ void* custom_loop(void *data)
 
       if((tlen+tlen_len+1) > lbuf)
       {
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- Recv buffer realloc (%d->%d) ****", lbuf, ((tlen+tlen_len+1)+1023) & ~0x3ff);
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - REALLOC - Recv buffer realloc (%d->%d) ****", lbuf, ((tlen+tlen_len+1)+1023) & ~0x3ff);
         lbuf = ((tlen+tlen_len+1)+1023) & ~0x3ff;
         buf = realloc(buf, lbuf);
         if(!buf)
         {
-          mosquitto_log_printf(MOSQ_LOG_ERR, "**** ERROR - realloc error - exit ****");
+          mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ERROR - realloc error - exit ****");
           return NULL;
         }
       }
@@ -185,7 +185,7 @@ void* custom_loop(void *data)
           topic = malloc(len+1);
           if(topic == NULL)
           {
-            mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (155)");
+            mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - DROP - Message dropped! (155)");
 #warning Rispondere NAK se QoS > 0
             break;
           }
@@ -207,7 +207,7 @@ void* custom_loop(void *data)
           if(message == NULL)
           {
             free(topic);
-            mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (175)");
+            mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - DROP - Message dropped! (175)");
 #warning Rispondere NAK se QoS > 0
             break;
           }
@@ -219,7 +219,7 @@ void* custom_loop(void *data)
           //printf("** PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d\n** payload=", qos, mid, topic, plen);
           //for(i=0; i<plen; i++) printf("%02x", message[i]);
           //printf("\n");
-          mosquitto_log_printf(MOSQ_LOG_NOTICE, "|- PUBLISH MID=%d plen=%d QoS=%d topic='%s'", mid, plen, qos, topic);
+          mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - RECEIVED - plen=%d QoS=%d MID=%d topic='%s'", plen, qos, mid, topic);
 
           tmsg = malloc(sizeof(struct msglist));
           if(tmsg)
@@ -243,7 +243,7 @@ void* custom_loop(void *data)
           }
           else
           {
-            mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (176)");
+            mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - DROP - Message dropped! (176)");
 
             free(topic);
             free(message);
@@ -281,7 +281,7 @@ void* custom_loop(void *data)
         elapsedTime = (now.tv_sec - cmsg->post_time.tv_sec) * 1000.0;      // sec to ms
         elapsedTime += (now.tv_usec - cmsg->post_time.tv_usec) / 1000.0;   // us to ms
 
-        mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- POST MID=%d Code=%d Elapsedms=%f", cmsg->mid, hmsg.header.code, elapsedTime);
+        mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - POST - Code=%d Elapsedms=%f MID=%d topic='%s'", hmsg.header.code, elapsedTime, cmsg->mid, cmsg->topic);
 
         if((hmsg.header.code == 200) && (cmsg->qos == 1))
         {
@@ -313,7 +313,7 @@ void* custom_loop(void *data)
         if(cmsg)
         {
           /* Il socket è stato chiuso dal server */
-          mosquitto_log_printf(MOSQ_LOG_ERR, "|- Message dropped! (180)");
+          mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - DROP - Message dropped! (180)");
           free(cmsg);
           cmsg = NULL;
         }
@@ -336,7 +336,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	client_id = strdup(config->post_clientid);
 	if(client_id == NULL)
 	{
-	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
+	  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
 	  return -1;
 	}
 
@@ -344,11 +344,11 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	if(context == NULL)
 	{
 	  free(client_id);
-	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
+	  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
 	  return -1;
 	}
 
-	mosquitto_log_printf(MOSQ_LOG_NOTICE, "Custom client connected as id '%s'.", client_id);
+	mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - CONNECTED - Custom client connected as id '%s'.", client_id);
 
 	socketpair(AF_LOCAL, SOCK_STREAM, 0, sock);
 	data = malloc(sizeof(struct custom_data));
@@ -356,7 +356,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	{
 	  free(client_id);
 	  free(context);
-	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
+	  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
 	  return -1;
 	}
 
@@ -372,7 +372,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	  free(client_id);
 	  free(context);
 	  free(data);
-	  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
+	  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
 	  return -1;
 	}
 
@@ -385,7 +385,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	for(i=0; i<config->post_topic_num; i++)
 	{
 		ret = mqtt3_sub_add(db, context, config->post_topic[i], config->post_topic_qos[i], &db->subs);
-		mosquitto_log_printf(MOSQ_LOG_NOTICE, "|-- Subscribing '%s' QoS=%d (%d)", config->post_topic[i], config->post_topic_qos[i], ret);
+		mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - SUBSCR - Subscribing '%s' QoS=%d (%d)", config->post_topic[i], config->post_topic_qos[i], ret);
 
 		/* Popolo la lista ACL con i topic registrati. */
 		acl = calloc(1, sizeof(struct _mosquitto_acl));
@@ -401,7 +401,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 		  free(client_id);
 		  free(data);
 		  free(context);
-		  mosquitto_log_printf(MOSQ_LOG_ERR, "|- Custom client NOT initialized!");
+		  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
 		  return -1;
 		}
 
