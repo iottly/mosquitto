@@ -83,10 +83,12 @@ void* custom_loop(void *data)
           free(cmsg);
           cmsg = NULL;
         }
-
-        strcpy(pvalue[2], cdata->config->post_header);
-        strcat(pvalue[2], " ");
-        strcat(pvalue[2], cmsg->value);
+        else
+        {
+          strcpy(pvalue[2], cdata->config->post_header);
+          strcat(pvalue[2], " ");
+          strcat(pvalue[2], cmsg->value);
+        }
       }
       else
       {
@@ -100,19 +102,22 @@ void* custom_loop(void *data)
           cmsg = NULL;
         }
       }
-
-      fdhttp = http_post(cdata->config->post_url, 3, ptopic, pvalue);
-
-      free(pvalue[2]);
-      free(cmsg->topic);
-      free(cmsg->value);
-      gettimeofday(&(cmsg->post_time), NULL);
-
-      if(fdhttp < 0)
+      
+      if(cmsg)
       {
-        free(cmsg);
-        cmsg = NULL;
-        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - POSTFAIL - HTTP POST failed!");
+        fdhttp = http_post(cdata->config->post_url, 3, ptopic, pvalue);
+
+        free(pvalue[2]);
+        gettimeofday(&(cmsg->post_time), NULL);
+
+        if(fdhttp < 0)
+        {
+          free(cmsg->topic);
+          free(cmsg->value);
+          free(cmsg);
+          cmsg = NULL;
+          mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - POSTFAIL - HTTP POST failed!");
+        }
       }
     }
 
@@ -306,6 +311,8 @@ void* custom_loop(void *data)
         if(cmsg->done)
         {
           close(fdhttp);
+          free(cmsg->topic);
+          free(cmsg->value);
           free(cmsg);
           cmsg = NULL;
         }
@@ -314,6 +321,8 @@ void* custom_loop(void *data)
         {
           /* Il socket è stato chiuso dal server */
           mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - DROP - Message dropped! (180)");
+          free(cmsg->topic);
+          free(cmsg->value);
           free(cmsg);
           cmsg = NULL;
         }
