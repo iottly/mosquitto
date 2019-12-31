@@ -23,7 +23,7 @@ RUN \
     autoconf \
     binutils \
     g++ \
-    gcc \    
+    gcc \
     make \
     curl \
     file \
@@ -32,10 +32,19 @@ RUN \
     util-linux-dev \
     git \
     gdb \
+    hiredis-dev \
   && apk add --update --virtual .auth-plug-runtime-dependencies \
     c-ares-dev \
     libuuid
 
+
+# # INSTALL hiredis C client
+# RUN \
+#   curl -L  -o hiredis-0.13.3.tar.gz https://github.com/redis/hiredis/archive/v0.13.3.tar.gz \
+#   && tar xzf hiredis-0.13.3.tar.gz -C /tmp/ \
+#   && cd /tmp/hiredis-0.13.3/ \
+#   && make \
+#   && make install
 
 
 ADD . /tmp/mosquitto
@@ -48,7 +57,6 @@ RUN  \
     && cd /tmp \
     && cd /tmp/${MOSQUITTO_FILENAME} \
     && make \
-
     && adduser -s /bin/false -D -H mosquitto
     
 #    && find . -type f | grep Makefile | xargs grep -r -- --strip-program  | awk {'print $1'} | cut -d : -f 1 | xargs sed -i 's/--strip-program=\${CROSS_COMPILE}\${STRIP}//g' \

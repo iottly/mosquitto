@@ -5,7 +5,7 @@ include ../config.mk
 MOSQ_CFLAGS=-DWITH_BROKER -DWITH_BRIDGE
 MOSQ_OBJS=custom.o http.o
 
-MOSQ_LIBS=-lpthread
+MOSQ_LIBS=-lpthread -lhiredis
 
 all : posthttp.so
 

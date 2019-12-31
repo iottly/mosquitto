@@ -10,6 +10,10 @@
 #include <sys/select.h>
 #include <sys/time.h>
 
+#include <stdlib.h>
+#include <string.h>
+#include <hiredis/hiredis.h>
+
 #include <errno.h>
 
 #define _mosquitto_malloc(x) malloc(x)
@@ -18,6 +22,7 @@
 struct custom_data {
   struct mqtt3_config *config;
   int sock;
+  redisContext *redis;
 };
 
 struct msglist {
@@ -45,6 +50,8 @@ void* custom_loop(void *data)
   char *ptopic[3];
   char *pvalue[3];
   struct http_message hmsg;
+
+  char *http_post_url = NULL;
 
   ibuf = 0;
   lbuf = 1024;
@@ -105,7 +112,28 @@ void* custom_loop(void *data)
       
       if(cmsg)
       {
-        fdhttp = http_post(cdata->config->post_url, 3, ptopic, pvalue);
+        // Call redis to choose the post URL
+        redisReply *reply;
+        reply = redisCommand(cdata->redis, "GET mqtt_rt_asdasd");
+        if (reply) {
+          if (reply->type == REDIS_REPLY_STRING) {
+            http_post_url = reply->str;
+            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS:%s\n", reply->str);
+
+          } else  if (reply->type == REDIS_REPLY_NIL) {
+            http_post_url = cdata->config->post_url;
+          } else if (reply->type == REDIS_REPLY_ERROR) {
+            // TODO log log log
+            http_post_url = cdata->config->post_url;
+          }
+        } else {
+          // ERROR
+          http_post_url = cdata->config->post_url;
+        }
+        mosquitto_log_printf(MOSQ_LOG_ERR, "URL:%s\n", http_post_url);
+        fdhttp = http_post(http_post_url, 3, ptopic, pvalue);
+        // free Redis reply
+        freeReplyObject(reply);
 
         free(pvalue[2]);
         gettimeofday(&(cmsg->post_time), NULL);
@@ -371,6 +399,23 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 
 	data->sock = sock[0];
 	data->config = config;
+
+  // Redis
+  redisContext *c;
+
+  struct timeval timeout = { 1, 500000 }; // 1.5 seconds
+  c = redisConnectWithTimeout("192.168.1.3", 6380, timeout);
+  if (c == NULL || c->err) {
+    if (c) {
+      mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: Connection error: %s\n", c->errstr);
+      redisFree(c);
+    } else {
+      mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: Connection error: can't allocate redis context\n");
+    }
+    data->redis = NULL;
+  } else {
+    data->redis = c;
+  }
 
 	context->sock = sock[1];
 	context->id = client_id;
