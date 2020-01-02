@@ -113,21 +113,27 @@ void* custom_loop(void *data)
       if(cmsg)
       {
         // Call redis to choose the post URL
-        redisReply *reply;
-        reply = redisCommand(cdata->redis, "GET mqtt_rt_asdasd");
+        redisContext *redis = cdata->redis;
+        redisReply *reply = NULL;
+        // TODO get redis key from topic string
+        if (redis) {
+          reply = redisCommand(cdata->redis, "GET mqtt_rt_asdasd");
+        }
         if (reply) {
           if (reply->type == REDIS_REPLY_STRING) {
             http_post_url = reply->str;
             mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS:%s\n", reply->str);
-
           } else  if (reply->type == REDIS_REPLY_NIL) {
+            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NOT FOUND\n");
             http_post_url = cdata->config->post_url;
           } else if (reply->type == REDIS_REPLY_ERROR) {
-            // TODO log log log
+            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS ERROR: %s\n", reply->str);
             http_post_url = cdata->config->post_url;
           }
         } else {
           // ERROR
+          mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NO REPLY\n");
+          // use default routing for msg
           http_post_url = cdata->config->post_url;
         }
         mosquitto_log_printf(MOSQ_LOG_ERR, "URL:%s\n", http_post_url);
@@ -415,6 +421,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
     data->redis = NULL;
   } else {
     data->redis = c;
+    redisEnableKeepAlive(c);
   }
 
 	context->sock = sock[1];
