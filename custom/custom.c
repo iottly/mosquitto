@@ -15,6 +15,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <hiredis/hiredis.h>
 
 #include <errno.h>
@@ -57,8 +58,6 @@ void* custom_loop(void *data)
   struct http_message hmsg;
 
   char *http_post_url = NULL;
-  // Redis stuff
-  redisContext *redis = cdata->redis;
 
   ibuf = 0;
   lbuf = 1024;
@@ -123,37 +122,42 @@ void* custom_loop(void *data)
         redisReply *reply = NULL;
         // TODO get redis key from topic string
 
+        // TODO here I should use trylock to speed things up
         pthread_mutex_lock( &cdata->redis_lock );
-        if (redis) {
-          reply = redisCommand(redis, "GET mqtt_rt_asdasd");
+        if (cdata->redis) {
+
+          reply = redisCommand(cdata->redis, "GET mqtt_rt_asdasd");
         }
         pthread_mutex_unlock( &cdata->redis_lock );
 
         if (reply) {
           if (reply->type == REDIS_REPLY_STRING) {
             http_post_url = reply->str;
-            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS:%s\n", reply->str);
+            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS:%s", reply->str);
           } else  if (reply->type == REDIS_REPLY_NIL) {
-            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NOT FOUND\n");
+            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NOT FOUND");
             http_post_url = cdata->config->post_url;
           } else if (reply->type == REDIS_REPLY_ERROR) {
-            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS ERROR: %s\n", reply->str);
+            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS ERROR: %s", reply->str);
             http_post_url = cdata->config->post_url;
           }
         } else {
           // ERROR
-          mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NO REPLY\n");
+          mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NO REPLY");
 
-          // Clean-up and signal reconnection
-          pthread_mutex_lock( &cdata->redis_lock );
-            redisFree( redis );
-            pthread_cond_signal( &cdata->redis_disconnected );
-          pthread_mutex_unlock( &cdata->redis_lock );
+          if (cdata->redis) {
+            // Clean-up and signal reconnection
+            pthread_mutex_lock( &cdata->redis_lock );
+              redisFree( cdata->redis );
+              cdata->redis = NULL;
+              pthread_cond_signal( &cdata->redis_disconnected );
+            pthread_mutex_unlock( &cdata->redis_lock );
+          }
 
           // use default routing for msg
           http_post_url = cdata->config->post_url;
         }
-        mosquitto_log_printf(MOSQ_LOG_ERR, "URL:%s\n", http_post_url);
+        mosquitto_log_printf(MOSQ_LOG_ERR, "URL:%s", http_post_url);
         fdhttp = http_post(http_post_url, 3, ptopic, pvalue);
         // free Redis reply
         freeReplyObject(reply);
@@ -275,7 +279,7 @@ void* custom_loop(void *data)
           //printf("** PUBLISH QoS=%d (MID=%d) topic='%s' plen=%d\n** payload=", qos, mid, topic, plen);
           //for(i=0; i<plen; i++) printf("%02x", message[i]);
           //printf("\n");
-          mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - RECEIVED - plen=%d QoS=%d MID=%d topic='%s'", plen, qos, mid, topic);
+          mosquitto_log_printf(MOSQ_LOG_NOTICE, "\nHTTP_POST - RECEIVED - plen=%d QoS=%d MID=%d topic='%s'", plen, qos, mid, topic);
 
           tmsg = malloc(sizeof(struct msglist));
           if(tmsg)
@@ -387,6 +391,8 @@ void* redis_reconn_loop (void *data) {
   pthread_mutex_t *redis_lock = &cdata->redis_lock;
   pthread_cond_t *redis_disconnected = &cdata->redis_disconnected;
 
+  struct timespec backoff = {0, 0L};
+
   while(1) {
     if (cdata->redis != NULL) {
       mosquitto_log_printf(MOSQ_LOG_NOTICE, "REDIS: conn_t - waiting for disconnection ...");
@@ -404,7 +410,13 @@ void* redis_reconn_loop (void *data) {
     // else we short-circuit to the connection code
 
       // TODO handle backoff in the re-connection
+      // handle backoff in the re-connection
+      nanosleep(&backoff, NULL);
+      if (backoff.tv_sec < 10) {
+        backoff.tv_sec += 1;
+      }
 
+    mosquitto_log_printf(MOSQ_LOG_NOTICE, "REDIS: Attempting connection ...");
     // then try to reconnect 
     redisContext *c;
     struct timeval timeout = { 1, 500000 }; // 1.5 seconds
@@ -423,7 +435,8 @@ void* redis_reconn_loop (void *data) {
     } else {
       // CONNECTION YEAAHH!!
       mosquitto_log_printf(MOSQ_LOG_NOTICE, "REDIS: connected!");
-
+      // reset backoff
+      backoff.tv_sec = 0;
       redisEnableKeepAlive(c);
       cdata->redis = c;
     }
