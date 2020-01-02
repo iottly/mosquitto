@@ -23,6 +23,11 @@
 #define _mosquitto_malloc(x) malloc(x)
 #define _mosquitto_free(x) free(x)
 
+#define TOPIC_MAX_LEN 128
+#define REDIS_KEY_PREFIX "mqtt_rt_"
+//GET mqtt_rt_<PID>\0  => 8 + 24 + 1
+#define REDIS_CMD_MAX_LEN 37
+
 struct custom_data {
   struct mqtt3_config *config;
   int sock;
@@ -44,6 +49,58 @@ struct msglist {
 struct timeval now;
 double elapsedTime;
 
+
+void get_routing_key_from_topic(char *topic, char *scratchpad, char **routing_key) {
+  // get redis key from topic string
+  // NOTE this is not general
+  strncpy(scratchpad, topic, TOPIC_MAX_LEN);
+  char *saveptr;
+  char *in = scratchpad;
+  for (int i = 0; i < 3; i++) {
+    *routing_key = strtok_r(in, "/", &saveptr);
+    in = NULL;
+    if (*routing_key == NULL) {
+      break;
+    }
+    mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - TOPIC - %d %s", i, *routing_key);
+  }
+}
+
+void search_post_url_in_redis(struct custom_data *cdata, char **http_post_url, char* redis_cmd, redisReply *reply) {
+
+  // TODO here I should use trylock to speed things up
+  pthread_mutex_lock( &cdata->redis_lock );
+  if (cdata->redis) {
+    reply = redisCommand(cdata->redis, redis_cmd);
+  }
+  pthread_mutex_unlock( &cdata->redis_lock );
+
+  if (reply) {
+    if (reply->type == REDIS_REPLY_STRING) {
+      *http_post_url = reply->str;
+      mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS:%s", reply->str);
+    } else  if (reply->type == REDIS_REPLY_NIL) {
+      mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NOT FOUND");
+    } else if (reply->type == REDIS_REPLY_ERROR) {
+      mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS ERROR: %s", reply->str);
+    }
+  } else {
+    // ERROR
+    mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NO REPLY");
+
+    if (cdata->redis) {
+      // Clean-up and signal reconnection
+      pthread_mutex_lock( &cdata->redis_lock );
+        redisFree( cdata->redis );
+        cdata->redis = NULL;
+        pthread_cond_signal( &cdata->redis_disconnected );
+      pthread_mutex_unlock( &cdata->redis_lock );
+    }
+
+  }
+}
+
+
 void* custom_loop(void *data)
 {
   struct custom_data *cdata = data;
@@ -58,6 +115,10 @@ void* custom_loop(void *data)
   struct http_message hmsg;
 
   char *http_post_url = NULL;
+  char topic_str_scratchpad[TOPIC_MAX_LEN];
+  memset(&topic_str_scratchpad, 0, TOPIC_MAX_LEN);
+  char redis_cmd[REDIS_CMD_MAX_LEN];
+  memset(&redis_cmd, 0, REDIS_CMD_MAX_LEN);
 
   ibuf = 0;
   lbuf = 1024;
@@ -118,45 +179,20 @@ void* custom_loop(void *data)
       
       if(cmsg)
       {
-        // Call redis to choose the post URL
         redisReply *reply = NULL;
-        // TODO get redis key from topic string
+        char *routing_key = NULL;
+        // use default routing for msg
+        http_post_url = cdata->config->post_url;
 
-        // TODO here I should use trylock to speed things up
-        pthread_mutex_lock( &cdata->redis_lock );
-        if (cdata->redis) {
+        get_routing_key_from_topic(cmsg->topic, topic_str_scratchpad, &routing_key);
 
-          reply = redisCommand(cdata->redis, "GET mqtt_rt_asdasd");
+        if (routing_key != NULL) {
+          snprintf(redis_cmd, 33, "GET "REDIS_KEY_PREFIX"%s", routing_key);
+          mosquitto_log_printf(MOSQ_LOG_ERR, "%s", redis_cmd);
+          // Call redis to choose the post URL
+          search_post_url_in_redis(cdata, &http_post_url, redis_cmd, reply);
         }
-        pthread_mutex_unlock( &cdata->redis_lock );
 
-        if (reply) {
-          if (reply->type == REDIS_REPLY_STRING) {
-            http_post_url = reply->str;
-            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS:%s", reply->str);
-          } else  if (reply->type == REDIS_REPLY_NIL) {
-            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NOT FOUND");
-            http_post_url = cdata->config->post_url;
-          } else if (reply->type == REDIS_REPLY_ERROR) {
-            mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS ERROR: %s", reply->str);
-            http_post_url = cdata->config->post_url;
-          }
-        } else {
-          // ERROR
-          mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NO REPLY");
-
-          if (cdata->redis) {
-            // Clean-up and signal reconnection
-            pthread_mutex_lock( &cdata->redis_lock );
-              redisFree( cdata->redis );
-              cdata->redis = NULL;
-              pthread_cond_signal( &cdata->redis_disconnected );
-            pthread_mutex_unlock( &cdata->redis_lock );
-          }
-
-          // use default routing for msg
-          http_post_url = cdata->config->post_url;
-        }
         mosquitto_log_printf(MOSQ_LOG_ERR, "URL:%s", http_post_url);
         fdhttp = http_post(http_post_url, 3, ptopic, pvalue);
         // free Redis reply
@@ -409,7 +445,6 @@ void* redis_reconn_loop (void *data) {
     }
     // else we short-circuit to the connection code
 
-      // TODO handle backoff in the re-connection
       // handle backoff in the re-connection
       nanosleep(&backoff, NULL);
       if (backoff.tv_sec < 10) {
