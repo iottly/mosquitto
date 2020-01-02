@@ -3,6 +3,9 @@
 #include "http.h"
 /* Viene incluso "dummypthread.h", ma devo usare la libreria reale */
 #undef pthread_create
+#undef pthread_mutex_init
+#undef pthread_cond_init
+
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -23,6 +26,8 @@ struct custom_data {
   struct mqtt3_config *config;
   int sock;
   redisContext *redis;
+  pthread_mutex_t redis_lock;
+  pthread_cond_t redis_disconnected;
 };
 
 struct msglist {
@@ -52,6 +57,8 @@ void* custom_loop(void *data)
   struct http_message hmsg;
 
   char *http_post_url = NULL;
+  // Redis stuff
+  redisContext *redis = cdata->redis;
 
   ibuf = 0;
   lbuf = 1024;
@@ -113,12 +120,15 @@ void* custom_loop(void *data)
       if(cmsg)
       {
         // Call redis to choose the post URL
-        redisContext *redis = cdata->redis;
         redisReply *reply = NULL;
         // TODO get redis key from topic string
+
+        pthread_mutex_lock( &cdata->redis_lock );
         if (redis) {
-          reply = redisCommand(cdata->redis, "GET mqtt_rt_asdasd");
+          reply = redisCommand(redis, "GET mqtt_rt_asdasd");
         }
+        pthread_mutex_unlock( &cdata->redis_lock );
+
         if (reply) {
           if (reply->type == REDIS_REPLY_STRING) {
             http_post_url = reply->str;
@@ -133,6 +143,13 @@ void* custom_loop(void *data)
         } else {
           // ERROR
           mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NO REPLY\n");
+
+          // Clean-up and signal reconnection
+          pthread_mutex_lock( &cdata->redis_lock );
+            redisFree( redis );
+            pthread_cond_signal( &cdata->redis_disconnected );
+          pthread_mutex_unlock( &cdata->redis_lock );
+
           // use default routing for msg
           http_post_url = cdata->config->post_url;
         }
@@ -365,12 +382,63 @@ void* custom_loop(void *data)
   }
 }
 
+void* redis_reconn_loop (void *data) {
+  struct custom_data *cdata = data;
+  pthread_mutex_t *redis_lock = &cdata->redis_lock;
+  pthread_cond_t *redis_disconnected = &cdata->redis_disconnected;
+
+  while(1) {
+    if (cdata->redis != NULL) {
+      mosquitto_log_printf(MOSQ_LOG_NOTICE, "REDIS: conn_t - waiting for disconnection ...");
+      pthread_mutex_lock( redis_lock );
+      while (cdata->redis != NULL) {
+        // re-check condition to filter out spurious wakeups
+        pthread_cond_wait( redis_disconnected, redis_lock );
+      }
+      // COND: here redis is NULL
+
+      // release the mutex while waiting for connection
+      pthread_mutex_unlock( redis_lock );
+      mosquitto_log_printf(MOSQ_LOG_NOTICE, "REDIS: conn_t - disconnected");
+    }
+    // else we short-circuit to the connection code
+
+      // TODO handle backoff in the re-connection
+
+    // then try to reconnect 
+    redisContext *c;
+    struct timeval timeout = { 1, 500000 }; // 1.5 seconds
+      //TODO get conn params from config
+    c = redisConnectWithTimeout("192.168.1.3", 6380, timeout);
+    // at this point we have an answer so we can lock the mutex
+    pthread_mutex_lock( redis_lock );  // MUTEX ACQUIRE
+    if (c == NULL || c->err) {
+      if (c) {
+        mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: Connection error: %s\n", c->errstr);
+        redisFree(c);
+      } else {
+        mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: Connection error: can't allocate redis context\n");
+      }
+      cdata->redis = NULL;
+    } else {
+      // CONNECTION YEAAHH!!
+      mosquitto_log_printf(MOSQ_LOG_NOTICE, "REDIS: connected!");
+
+      redisEnableKeepAlive(c);
+      cdata->redis = c;
+    }
+    pthread_mutex_unlock( redis_lock ); // MUTEX RELEASE
+    // wait for next disconnection
+  }
+}
+
 int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 {
 	char *client_id = NULL;
 	struct mosquitto *context;
 	int i, ret, sock[2];
 	pthread_t p;
+ 	pthread_t redis_reconn_th;
 	struct custom_data *data;
 	struct _mosquitto_acl *acl;
 
@@ -403,26 +471,14 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	  return -1;
 	}
 
-	data->sock = sock[0];
 	data->config = config;
+	data->sock = sock[0];
+  data->redis = NULL;
 
-  // Redis
-  redisContext *c;
+  pthread_mutex_init(&data->redis_lock, NULL);
+  pthread_cond_init(&data->redis_disconnected, NULL);
+  // TODO check errors
 
-  struct timeval timeout = { 1, 500000 }; // 1.5 seconds
-  c = redisConnectWithTimeout("192.168.1.3", 6380, timeout);
-  if (c == NULL || c->err) {
-    if (c) {
-      mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: Connection error: %s\n", c->errstr);
-      redisFree(c);
-    } else {
-      mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: Connection error: can't allocate redis context\n");
-    }
-    data->redis = NULL;
-  } else {
-    data->redis = c;
-    redisEnableKeepAlive(c);
-  }
 
 	context->sock = sock[1];
 	context->id = client_id;
@@ -471,6 +527,14 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 		acl->next = context->acl_list->acl;
 		context->acl_list->acl = acl;
 	}
+
+
+  mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - REDIS starting thread");
+
+  pthread_create(&redis_reconn_th, NULL, redis_reconn_loop, data);
+  pthread_detach(redis_reconn_th);
+
+  mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - REDIS thread created");
 
 	pthread_create(&p, NULL, custom_loop, data);
 	pthread_detach(p);
