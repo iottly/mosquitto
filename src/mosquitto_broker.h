@@ -159,6 +159,8 @@ struct mqtt3_config {
 	int post_topic_num;
 	char *post_topic[100];
 	int post_topic_qos[100];
+	char *post_redis_host;
+	int post_redis_port;
 };
 
 struct _mosquitto_subleaf {

@@ -463,8 +463,10 @@ void* redis_reconn_loop (void *data) {
     // then try to reconnect 
     redisContext *c;
     struct timeval timeout = { 1, 500000 }; // 1.5 seconds
-      //TODO get conn params from config
-    c = redisConnectWithTimeout("192.168.1.3", 6380, timeout);
+    
+    char *host = cdata->config->post_redis_host;
+    int port = cdata->config->post_redis_port;
+    c = redisConnectWithTimeout(host, port, timeout);
     // at this point we have an answer so we can lock the mutex
     if (c == NULL || c->err) {
       if (c) {
