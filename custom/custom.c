@@ -3,8 +3,12 @@
 #include "http.h"
 /* Viene incluso "dummypthread.h", ma devo usare la libreria reale */
 #undef pthread_create
+#undef pthread_join
+#undef pthread_cancel
 #undef pthread_mutex_init
-#undef pthread_cond_init
+#undef pthread_mutex_destroy
+#undef pthread_mutex_lock
+#undef pthread_mutex_unlock
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -70,7 +74,9 @@ void search_post_url_in_redis(struct custom_data *cdata, char **http_post_url, c
   // COND *reply == NULL
   // Here we try to lock the mutex, if we cannot lock the mutex
   //    => redis is disconnected.
-  int r = pthread_mutex_trylock( &cdata->redis_lock );
+  pthread_mutex_t *redis_lock = &cdata->redis_lock;
+
+  int r = pthread_mutex_trylock( redis_lock );
   if ( r == 0 && cdata->redis ) {
     reply = redisCommand(cdata->redis, redis_cmd);
   }
@@ -94,10 +100,12 @@ void search_post_url_in_redis(struct custom_data *cdata, char **http_post_url, c
       cdata->redis = NULL;
       pthread_cond_signal( &cdata->redis_disconnected );
     }
-
   }
+
   // Release the mutex
-  pthread_mutex_unlock( &cdata->redis_lock );
+  if (r == 0) {
+    pthread_mutex_unlock( redis_lock );
+  }
 }
 
 
