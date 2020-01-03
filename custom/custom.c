@@ -29,8 +29,8 @@
 
 #define TOPIC_MAX_LEN 128
 #define REDIS_KEY_PREFIX "mqtt_rt_"
-//GET mqtt_rt_<PID>\0  => 8 + 24 + 1
-#define REDIS_CMD_MAX_LEN 37
+//GET mqtt_rt_<PID>\0  => 12 + 24 + 1
+#define REDIS_CMD_LEN 37
 
 struct custom_data {
   struct mqtt3_config *config;
@@ -125,8 +125,8 @@ void* custom_loop(void *data)
   char *http_post_url = NULL;
   char topic_str_scratchpad[TOPIC_MAX_LEN];
   memset(&topic_str_scratchpad, 0, TOPIC_MAX_LEN);
-  char redis_cmd[REDIS_CMD_MAX_LEN];
-  memset(&redis_cmd, 0, REDIS_CMD_MAX_LEN);
+  char redis_cmd[REDIS_CMD_LEN];
+  memset(&redis_cmd, 0, REDIS_CMD_LEN);
 
   ibuf = 0;
   lbuf = 1024;
@@ -195,7 +195,7 @@ void* custom_loop(void *data)
         get_routing_key_from_topic(cmsg->topic, topic_str_scratchpad, &routing_key);
 
         if (routing_key != NULL) {
-          snprintf(redis_cmd, 33, "GET "REDIS_KEY_PREFIX"%s", routing_key);
+          snprintf(redis_cmd, REDIS_CMD_LEN, "GET "REDIS_KEY_PREFIX"%s", routing_key);
           mosquitto_log_printf(MOSQ_LOG_ERR, "%s", redis_cmd);
           // Call redis to choose the post URL
           search_post_url_in_redis(cdata, &http_post_url, redis_cmd, reply);
