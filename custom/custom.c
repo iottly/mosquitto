@@ -66,7 +66,6 @@ void get_routing_key_from_topic(char *topic, char *scratchpad, char **routing_ke
     if (*routing_key == NULL) {
       break;
     }
-    mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - TOPIC - %d %s", i, *routing_key);
   }
 }
 
@@ -84,16 +83,15 @@ void search_post_url_in_redis(struct custom_data *cdata, char **http_post_url, c
   if (reply) {
     if (reply->type == REDIS_REPLY_STRING) {
       *http_post_url = reply->str;
-      mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS:%s", reply->str);
+      // mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS:%s", reply->str);
     } else  if (reply->type == REDIS_REPLY_NIL) {
-      mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NOT FOUND");
+      // mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NOT FOUND");
     } else if (reply->type == REDIS_REPLY_ERROR) {
       mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS ERROR: %s", reply->str);
     }
   } else {
     // ERROR
     mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: NO REPLY");
-
     if (cdata->redis) {
       // Clean-up and signal reconnection
       redisFree( cdata->redis );
@@ -196,12 +194,10 @@ void* custom_loop(void *data)
 
         if (routing_key != NULL) {
           snprintf(redis_cmd, REDIS_CMD_LEN, "GET "REDIS_KEY_PREFIX"%s", routing_key);
-          mosquitto_log_printf(MOSQ_LOG_ERR, "%s", redis_cmd);
           // Call redis to choose the post URL
           search_post_url_in_redis(cdata, &http_post_url, redis_cmd, reply);
         }
 
-        mosquitto_log_printf(MOSQ_LOG_ERR, "URL:%s", http_post_url);
         fdhttp = http_post(http_post_url, 3, ptopic, pvalue);
         // free Redis reply
         freeReplyObject(reply);
