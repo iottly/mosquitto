@@ -67,13 +67,13 @@ void get_routing_key_from_topic(char *topic, char *scratchpad, char **routing_ke
 }
 
 void search_post_url_in_redis(struct custom_data *cdata, char **http_post_url, char* redis_cmd, redisReply *reply) {
-
-  // TODO here I should use trylock to speed things up
-  pthread_mutex_lock( &cdata->redis_lock );
-  if (cdata->redis) {
+  // COND *reply == NULL
+  // Here we try to lock the mutex, if we cannot lock the mutex
+  //    => redis is disconnected.
+  int r = pthread_mutex_trylock( &cdata->redis_lock );
+  if ( r == 0 && cdata->redis ) {
     reply = redisCommand(cdata->redis, redis_cmd);
   }
-  pthread_mutex_unlock( &cdata->redis_lock );
 
   if (reply) {
     if (reply->type == REDIS_REPLY_STRING) {
@@ -90,14 +90,14 @@ void search_post_url_in_redis(struct custom_data *cdata, char **http_post_url, c
 
     if (cdata->redis) {
       // Clean-up and signal reconnection
-      pthread_mutex_lock( &cdata->redis_lock );
-        redisFree( cdata->redis );
-        cdata->redis = NULL;
-        pthread_cond_signal( &cdata->redis_disconnected );
-      pthread_mutex_unlock( &cdata->redis_lock );
+      redisFree( cdata->redis );
+      cdata->redis = NULL;
+      pthread_cond_signal( &cdata->redis_disconnected );
     }
 
   }
+  // Release the mutex
+  pthread_mutex_unlock( &cdata->redis_lock );
 }
 
 
@@ -432,15 +432,15 @@ void* redis_reconn_loop (void *data) {
   while(1) {
     if (cdata->redis != NULL) {
       mosquitto_log_printf(MOSQ_LOG_NOTICE, "REDIS: conn_t - waiting for disconnection ...");
+      // Here we acquire the lock to use the pthread condition
       pthread_mutex_lock( redis_lock );
       while (cdata->redis != NULL) {
         // re-check condition to filter out spurious wakeups
+        // NOTE: cond_wait release the lock before waiting
         pthread_cond_wait( redis_disconnected, redis_lock );
       }
-      // COND: here redis is NULL
+      // COND: here redis is NULL and we have the lock
 
-      // release the mutex while waiting for connection
-      pthread_mutex_unlock( redis_lock );
       mosquitto_log_printf(MOSQ_LOG_NOTICE, "REDIS: conn_t - disconnected");
     }
     // else we short-circuit to the connection code
@@ -458,7 +458,6 @@ void* redis_reconn_loop (void *data) {
       //TODO get conn params from config
     c = redisConnectWithTimeout("192.168.1.3", 6380, timeout);
     // at this point we have an answer so we can lock the mutex
-    pthread_mutex_lock( redis_lock );  // MUTEX ACQUIRE
     if (c == NULL || c->err) {
       if (c) {
         mosquitto_log_printf(MOSQ_LOG_ERR, "REDIS: Connection error: %s\n", c->errstr);
