@@ -517,10 +517,10 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	data->sock = sock[0];
   data->redis = NULL;
 
-  pthread_mutex_init(&data->redis_lock, NULL);
-  pthread_cond_init(&data->redis_disconnected, NULL);
-  // TODO check errors
-
+  ret = pthread_mutex_init(&data->redis_lock, NULL);
+  if (ret != 0) goto CLEANUP;
+  ret = pthread_cond_init(&data->redis_disconnected, NULL);
+  if (ret != 0) goto CLEANUP;
 
 	context->sock = sock[1];
 	context->id = client_id;
