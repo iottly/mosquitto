@@ -492,41 +492,26 @@ void* redis_reconn_loop (void *data) {
 int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 {
 	char *client_id = NULL;
-	struct mosquitto *context;
+	struct mosquitto *context = NULL;
 	int i, ret, sock[2];
 	pthread_t p;
  	pthread_t redis_reconn_th;
-	struct custom_data *data;
-	struct _mosquitto_acl *acl;
+	struct custom_data *data = NULL;
+	struct _mosquitto_acl *acl = NULL;
 
 	msg_head = msg_tail = NULL;
 
 	client_id = strdup(config->post_clientid);
-	if(client_id == NULL)
-	{
-	  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
-	  return -1;
-	}
+	if(client_id == NULL) goto CLEANUP;
 
 	context = calloc(1, sizeof(struct mosquitto));
-	if(context == NULL)
-	{
-	  free(client_id);
-	  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
-	  return -1;
-	}
+	if(context == NULL) goto CLEANUP;
 
 	mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - CONNECTED - Custom client connected as id '%s'.", client_id);
 
 	socketpair(AF_LOCAL, SOCK_STREAM, 0, sock);
 	data = malloc(sizeof(struct custom_data));
-	if(data == NULL)
-	{
-	  free(client_id);
-	  free(context);
-	  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
-	  return -1;
-	}
+	if(data == NULL) goto CLEANUP;
 
 	data->config = config;
 	data->sock = sock[0];
@@ -541,14 +526,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 	context->id = client_id;
 	/* Da popolare con la lista dei topic sottoscritti */
 	context->acl_list = calloc(1, sizeof(struct _mosquitto_acl_user));
-	if(context->acl_list == NULL)
-	{
-	  free(client_id);
-	  free(context);
-	  free(data);
-	  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
-	  return -1;
-	}
+	if(context->acl_list == NULL) goto CLEANUP;
 
 
 	HASH_ADD_KEYPTR(hh_id, db->contexts_by_id, context->id, strlen(context->id), context);
@@ -563,21 +541,7 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 
 		/* Popolo la lista ACL con i topic registrati. */
 		acl = calloc(1, sizeof(struct _mosquitto_acl));
-		if(acl == NULL)
-		{
-		  while(context->acl_list->acl)
-		  {
-		    acl = context->acl_list->acl->next;
-		    free(context->acl_list->acl);
-		    context->acl_list->acl = acl;
-		  }
-		  free(context->acl_list);
-		  free(client_id);
-		  free(data);
-		  free(context);
-		  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
-		  return -1;
-		}
+		if(acl == NULL) goto CLEANUP;
 
 		acl->topic = config->post_topic[i];
 		acl->access = 1;
@@ -585,16 +549,30 @@ int custom_init(struct mqtt3_config *config, struct mosquitto_db *db)
 		context->acl_list->acl = acl;
 	}
 
-
   mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - REDIS starting thread");
-
   pthread_create(&redis_reconn_th, NULL, redis_reconn_loop, data);
   pthread_detach(redis_reconn_th);
-
   mosquitto_log_printf(MOSQ_LOG_NOTICE, "HTTP_POST - REDIS thread created");
 
 	pthread_create(&p, NULL, custom_loop, data);
 	pthread_detach(p);
 
 	return 0;
+
+CLEANUP:
+  // Clean-up code
+  if ( context != NULL && context->acl_list != NULL ) {
+    while( context->acl_list->acl ){
+      acl = context->acl_list->acl->next;
+      free(context->acl_list->acl);
+      context->acl_list->acl = acl;
+    }
+    free(context->acl_list);
+  }
+  if (data != NULL) free(data);
+  if (context != NULL) free(context);
+  if (client_id != NULL) free(client_id);
+
+  mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - NOTINIT - Custom client NOT initialized!");
+  return -1;
 }
