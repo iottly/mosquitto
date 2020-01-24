@@ -136,6 +136,8 @@ void* custom_loop(void *data)
   FD_ZERO(&fds);
   while(1)
   {
+    mosquitto_log_printf(MOSQ_LOG_ERR, "DBG --- LOOP START %d", mid);
+
     if(!cmsg && msg_head)
     {
       cmsg = msg_head;
@@ -185,6 +187,8 @@ void* custom_loop(void *data)
       
       if(cmsg)
       {
+        mosquitto_log_printf(MOSQ_LOG_ERR, "DBG --- CMSG  MID %d", mid);
+
         redisReply *reply = NULL;
         char *routing_key = NULL;
         // use default routing for msg
@@ -198,7 +202,7 @@ void* custom_loop(void *data)
           search_post_url_in_redis(cdata, &http_post_url, redis_cmd, reply);
         }
 
-        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE pre post");
+        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE pre post %d ", mid);
 
         fdhttp = http_post(http_post_url, 3, ptopic, pvalue);
         mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE post post %d ", mid);
@@ -243,6 +247,8 @@ void* custom_loop(void *data)
 
     if(FD_ISSET(fd, &fds))
     {
+      mosquitto_log_printf(MOSQ_LOG_ERR, "DBG --- READ MQTT  MID %d", mid);
+
       n = read(fd, buf+ibuf, lbuf-ibuf);
       if(n <= 0)
       {
@@ -380,6 +386,8 @@ void* custom_loop(void *data)
 
     if((fdhttp >= 0) && FD_ISSET(fdhttp, &fds))
     {
+        mosquitto_log_printf(MOSQ_LOG_ERR, "DBG --- READ HTTP %d  MID %d", fdhttp, mid);
+
       n = http_read(fdhttp, &hmsg);
       mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE after read HTTP mid %d ", mid);
 
