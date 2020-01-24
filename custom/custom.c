@@ -56,8 +56,12 @@ void* custom_loop(void *data)
   FD_ZERO(&fds);
   while(1)
   {
-    if(!cmsg && msg_head)
+    if((!cmsg || cmsg->done == 1) && msg_head)
     {
+      if (cmsg) {
+        free(cmsg);
+      }
+
       cmsg = msg_head;
       msg_head = msg_head->next;
       if(!msg_head) msg_tail = NULL;
@@ -304,7 +308,7 @@ void* custom_loop(void *data)
         //free(cmsg);
         //cmsg = NULL;
         cmsg->done = 1;
-        shutdown(fdhttp, 2);
+        // shutdown(fdhttp, 2);
       }
       else if(n < 0)
       {
