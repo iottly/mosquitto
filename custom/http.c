@@ -9,6 +9,8 @@
 #include <unistd.h>
 
 #include "http.h"
+#include "mosquitto_broker.h"
+
 
 #ifndef HTTP_USER_AGENT
 #define HTTP_USER_AGENT "Mozilla/4.0 (Linux)"
@@ -18,6 +20,7 @@
 #define HTTP_TIME_OUT 360
 #endif
 
+// TODO remove
 static int gsd = -1;
 
 /**
@@ -127,6 +130,7 @@ int http_connect(struct http_url *hu) {
 	}
 
 	freeaddrinfo(si);
+	mosquitto_log_printf(MOSQ_LOG_ERR, "ALE HTTP connect eseguita");
 
 	return sd;
 }
@@ -148,6 +152,7 @@ int http_send(int sd, const char *rq) {
 		int bytes = send(sd, rq, l, 0);
 
 		if (bytes < 0) {
+			mosquitto_log_printf(MOSQ_LOG_ERR, "ALE send fallita");
 			return -1;
 		}
 
@@ -407,6 +412,8 @@ int http_read(int sd, struct http_message *msg) {
 					/* return 0 for keep-alive connections */
 				{
 					msg->state.offset = NULL;
+					          mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - KEEPALIVE");
+
 					return 0;
 				}
 				return 1;
@@ -453,6 +460,7 @@ int http_read(int sd, struct http_message *msg) {
 					0)) < 1) {
 				/* bytes == 0 means remote socket was closed */
 				close(sd);
+				// TODO why u do that ???
 				gsd = -1;
 				return -1;
 			}
@@ -465,67 +473,67 @@ int http_read(int sd, struct http_message *msg) {
 	return 0;
 }
 
-/**
- * Send HTTP request
- *
- * @param url - URL
- */
-int http_request(const char *url) {
-	struct http_url *hu;
-	int sd;
+// /**
+//  * Send HTTP request
+//  *
+//  * @param url - URL
+//  */
+// int http_request(const char *url) {
+// 	struct http_url *hu;
+// 	int sd;
 
-	if (!(hu = http_parse_url(url)) ||
-			(sd = http_connect(hu)) < 0) {
-		/* it's save to free NULL */
-		free(hu);
-		return -1;
-	}
+// 	if (!(hu = http_parse_url(url)) ||
+// 			(sd = http_connect(hu)) < 0) {
+// 		/* it's save to free NULL */
+// 		free(hu);
+// 		return -1;
+// 	}
 
-	/* this way even very very long query strings won't be a problem */
-	if (http_send(sd, "GET /") ||
-			http_send(sd, hu->query) ||
-			http_send(sd, " HTTP/1.1\r\n\
-User-Agent: "HTTP_USER_AGENT"\r\n\
-Host: ") ||
-			http_send(sd, hu->host) ||
-			http_send(sd, "\r\n\
-Accept: */*\r\n\
-Connection: close\r\n\
-\r\n")) {
-		close(sd);
-		return -1;
-	}
+// 	/* this way even very very long query strings won't be a problem */
+// 	if (http_send(sd, "GET /") ||
+// 			http_send(sd, hu->query) ||
+// 			http_send(sd, " HTTP/1.1\r\n\
+// User-Agent: "HTTP_USER_AGENT"\r\n\
+// Host: ") ||
+// 			http_send(sd, hu->host) ||
+// 			http_send(sd, "\r\n\
+// Accept: */*\r\n\
+// Connection: close\r\n\
+// \r\n")) {
+// 		close(sd);
+// 		return -1;
+// 	}
 
-	free(hu);
+// 	free(hu);
 
-	return sd;
-}
+// 	return sd;
+// }
 
-/**
- * Read next part of the response; returns 0 when message is complete;
- * this function blocks until data is available
- *
- * @param sd - socket
- * @param msg - message struct that gets filled with data, must be
- *              all 0 for the very first call
- */
-int http_response(int sd, struct http_message *msg) {
-	fd_set r;
-	struct timeval tv;
+// /**
+//  * Read next part of the response; returns 0 when message is complete;
+//  * this function blocks until data is available
+//  *
+//  * @param sd - socket
+//  * @param msg - message struct that gets filled with data, must be
+//  *              all 0 for the very first call
+//  */
+// int http_response(int sd, struct http_message *msg) {
+// 	fd_set r;
+// 	struct timeval tv;
 
-	tv.tv_sec = HTTP_TIME_OUT;
-	tv.tv_usec = 0;
+// 	tv.tv_sec = HTTP_TIME_OUT;
+// 	tv.tv_usec = 0;
 
-	FD_ZERO(&r);
-	FD_SET(sd, &r);
+// 	FD_ZERO(&r);
+// 	FD_SET(sd, &r);
 
-	if (select(sd + 1, &r, NULL, NULL, &tv) < 1 ||
-			!FD_ISSET(sd, &r)) {
-		return -1;
-	}
+// 	if (select(sd + 1, &r, NULL, NULL, &tv) < 1 ||
+// 			!FD_ISSET(sd, &r)) {
+// 		return -1;
+// 	}
 
-	return http_read(sd, msg);
-}
+// 	return http_read(sd, msg);
+// }
 
 #define MULTIPART_BOUNDARY "----multi----"
 

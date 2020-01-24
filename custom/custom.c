@@ -198,7 +198,11 @@ void* custom_loop(void *data)
           search_post_url_in_redis(cdata, &http_post_url, redis_cmd, reply);
         }
 
+        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE pre post");
+
         fdhttp = http_post(http_post_url, 3, ptopic, pvalue);
+        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE post post");
+
         // free Redis reply
         freeReplyObject(reply);
 
@@ -217,12 +221,15 @@ void* custom_loop(void *data)
     }
 
     fdmax = fd;
+    mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - max FD 1 %d", fdmax);
     FD_SET(fd, &fds);
 
     if(fdhttp >= 0)
     {
       FD_SET(fdhttp, &fds);
       if(fdhttp > fdmax) fdmax = fdhttp;
+      mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - max FD 2 %d", fdmax);
+
     }
     n = select(fdmax+1, &fds, NULL, NULL, NULL);
 
@@ -374,6 +381,8 @@ void* custom_loop(void *data)
     if((fdhttp >= 0) && FD_ISSET(fdhttp, &fds))
     {
       n = http_read(fdhttp, &hmsg);
+      mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE after read HTTP");
+
 
       if(n == 0)
       {
@@ -385,6 +394,8 @@ void* custom_loop(void *data)
 
         if((hmsg.header.code == 200) && (cmsg->qos == 1))
         {
+          mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE");
+
           /* Invia il PUBACK al sender */
           puback[0] = PUBACK | (1<<1);	// PUBACK + QoS 1
           puback[1] = 2;
@@ -399,13 +410,20 @@ void* custom_loop(void *data)
         //free(cmsg);
         //cmsg = NULL;
         cmsg->done = 1;
+
+        // TODO why this ???? AHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST -SHUTDOWN SOCK");
         shutdown(fdhttp, 2);
       }
       else if(n < 0)
       {
+        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - READ ERR HTTP");
+
         if(cmsg->done)
         {
+          // TODO ALE this is already closed
           close(fdhttp);
+          mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - READ ERR HTTP cmsgdone sfd closed");
           free(cmsg->topic);
           free(cmsg->value);
           free(cmsg);
