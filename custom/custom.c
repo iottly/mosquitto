@@ -201,7 +201,7 @@ void* custom_loop(void *data)
         mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE pre post");
 
         fdhttp = http_post(http_post_url, 3, ptopic, pvalue);
-        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE post post");
+        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE post post %d ", mid);
 
         // free Redis reply
         freeReplyObject(reply);
@@ -381,7 +381,7 @@ void* custom_loop(void *data)
     if((fdhttp >= 0) && FD_ISSET(fdhttp, &fds))
     {
       n = http_read(fdhttp, &hmsg);
-      mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE after read HTTP");
+      mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE after read HTTP mid %d ", mid);
 
 
       if(n == 0)
@@ -394,7 +394,7 @@ void* custom_loop(void *data)
 
         if((hmsg.header.code == 200) && (cmsg->qos == 1))
         {
-          mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE");
+          mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - ALE %d ", mid);
 
           /* Invia il PUBACK al sender */
           puback[0] = PUBACK | (1<<1);	// PUBACK + QoS 1
@@ -417,7 +417,7 @@ void* custom_loop(void *data)
       }
       else if(n < 0)
       {
-        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - READ ERR HTTP");
+        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - READ ERR HTTP %d ", mid);
 
         if(cmsg->done)
         {
