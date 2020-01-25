@@ -223,6 +223,11 @@ void* custom_loop(void *data)
           // Init the socket fd (-1 is disconnected)
           current_http_fd->fd = -1;
           HASH_ADD_KEYPTR( hh, http_fds, current_http_fd->url, strlen(current_http_fd->url), current_http_fd);
+          int total_fd = HASH_COUNT(http_fds);
+          mosquitto_log_printf(
+            MOSQ_LOG_NOTICE,
+            "HTTP_POST - added FD for HTTP to url %s tot: %d", http_post_url, total_fd
+          );
         }
 
         current_http_fd->fd = http_post(current_http_fd->fd, http_post_url, 3, ptopic, pvalue);
