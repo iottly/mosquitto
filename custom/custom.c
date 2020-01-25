@@ -136,8 +136,12 @@ void* custom_loop(void *data)
   FD_ZERO(&fds);
   while(1)
   {
-    if(!cmsg && msg_head)
+    if((!cmsg || cmsg->done == 1) && msg_head)
     {
+      if (cmsg) {
+        free(cmsg);
+      }
+
       cmsg = msg_head;
       msg_head = msg_head->next;
       if(!msg_head) msg_tail = NULL;
@@ -286,7 +290,7 @@ void* custom_loop(void *data)
           if(topic == NULL)
           {
             mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - DROP - Message dropped! (155)");
-#warning Rispondere NAK se QoS > 0
+            #warning Rispondere NAK se QoS > 0
             break;
           }
           memcpy(topic, buf+tlen_len+3, len);
@@ -308,7 +312,7 @@ void* custom_loop(void *data)
           {
             free(topic);
             mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - DROP - Message dropped! (175)");
-#warning Rispondere NAK se QoS > 0
+            #warning Rispondere NAK se QoS > 0
             break;
           }
           memcpy(message, buf+ibase, plen);
@@ -396,10 +400,9 @@ void* custom_loop(void *data)
         /* if(qos == 2) _mosquitto_send_pubrec(context, mid);
              ... che a sua volta riceve PUBREL che richiede il PUBCOMP.
         */
-        //free(cmsg);
-        //cmsg = NULL;
+
+        // This will trigger the processing of a new msg from MQTT
         cmsg->done = 1;
-        shutdown(fdhttp, 2);
       }
       else if(n < 0)
       {
