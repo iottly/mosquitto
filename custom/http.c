@@ -18,7 +18,6 @@
 #define HTTP_TIME_OUT 360
 #endif
 
-static int gsd = -1;
 
 /**
  * Parse URL into protocol, hostname and query part; the returned
@@ -453,7 +452,6 @@ int http_read(int sd, struct http_message *msg) {
 					0)) < 1) {
 				/* bytes == 0 means remote socket was closed */
 				close(sd);
-				gsd = -1;
 				return -1;
 			}
 
@@ -469,16 +467,21 @@ int http_read(int sd, struct http_message *msg) {
 
 #define MULTIPART_BOUNDARY "----multi----"
 
-int http_post(const char *url, int ndata, char **topic, char **value) {
+
+/*
+* This should accept a socket fd as input (or -1 if it need to connect)
+*/
+int http_post(int sd, const char *url, int ndata, char **topic, char **value) {
 	struct http_url *hu;
 	int i, len;
+	int sock_fd = sd;
 	char content_length[16], *content;
 	
 	if (!(hu = http_parse_url(url))) {
 		return -1;
 	}
 	
-	if ((gsd < 0) && (gsd = http_connect(hu)) < 0) {
+	if ((sock_fd < 0) && (sock_fd = http_connect(hu)) < 0) {
 		/* it's save to free NULL */
 		free(hu);
 		return -1;
@@ -506,21 +509,21 @@ int http_post(const char *url, int ndata, char **topic, char **value) {
         sprintf(content+strlen(content), "--" MULTIPART_BOUNDARY "--\r\n");
         
 	/* this way even very very long query strings won't be a problem */
-	if (http_send(gsd, "POST /") ||
-			http_send(gsd, hu->query) ||
-			http_send(gsd, " HTTP/1.1\r\n\
+	if (http_send(sock_fd, "POST /") ||
+			http_send(sock_fd, hu->query) ||
+			http_send(sock_fd, " HTTP/1.1\r\n\
 User-Agent: "HTTP_USER_AGENT"\r\n\
 Host: ") ||
-			http_send(gsd, hu->host) ||
-			http_send(gsd, "\r\n\
+			http_send(sock_fd, hu->host) ||
+			http_send(sock_fd, "\r\n\
 Accept: */*\r\n\
 Content-Length: ") ||
-			http_send(gsd, content_length) ||
-			http_send(gsd, "Content-Type: multipart/form-data;; boundary=" MULTIPART_BOUNDARY "\r\n\
+			http_send(sock_fd, content_length) ||
+			http_send(sock_fd, "Content-Type: multipart/form-data;; boundary=" MULTIPART_BOUNDARY "\r\n\
 Connection: keep-alive\r\n\
 \r\n") ||
-			http_send(gsd, content)) {
-		close(gsd);
+			http_send(sock_fd, content)) {
+		close(sock_fd);
 		free(content);
 		free(hu);
 		return -1;
@@ -529,7 +532,7 @@ Connection: keep-alive\r\n\
 	free(content);
 	free(hu);
 
-	return gsd;
+	return sock_fd;
 }
 
 

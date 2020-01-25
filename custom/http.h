@@ -34,6 +34,6 @@ int http_send(int, const char *);
 int http_read(int, struct http_message *);
 
 /* high level methods */
-int http_post(const char *, int , char **, char **);
+int http_post(int sd, const char *, int , char **, char **);
 
 #endif

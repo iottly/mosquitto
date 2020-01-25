@@ -202,7 +202,7 @@ void* custom_loop(void *data)
           search_post_url_in_redis(cdata, &http_post_url, redis_cmd, reply);
         }
 
-        fdhttp = http_post(http_post_url, 3, ptopic, pvalue);
+        fdhttp = http_post(fdhttp, http_post_url, 3, ptopic, pvalue);
         // free Redis reply
         freeReplyObject(reply);
 
