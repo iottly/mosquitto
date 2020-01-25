@@ -444,6 +444,7 @@ void* custom_loop(void *data)
           cmsg = NULL;
         }
         current_http_fd->fd = -1;
+        mosquitto_log_printf(MOSQ_LOG_ERR, "HTTP_POST - HTTP FD CLOSED (447)");
         if(cmsg)
         {
           /* Il socket è stato chiuso dal server */
