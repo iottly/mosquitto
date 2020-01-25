@@ -1,6 +1,8 @@
 #include "mosquitto_broker.h"
 #include "mqtt3_protocol.h"
 #include "http.h"
+#include "uthash.h"
+
 /* Viene incluso "dummypthread.h", ma devo usare la libreria reale */
 #undef pthread_create
 #undef pthread_join
@@ -49,6 +51,12 @@ struct msglist {
   struct msglist *next;
   struct timeval post_time;
 } *msg_head, *msg_tail;
+
+struct http_fds_entry {
+    const char *url;
+    int fd;
+    UT_hash_handle hh;
+};
 
 struct timeval now;
 double elapsedTime;
@@ -126,6 +134,10 @@ void* custom_loop(void *data)
   char redis_cmd[REDIS_CMD_LEN];
   memset(&redis_cmd, 0, REDIS_CMD_LEN);
 
+  // Decalration of hash handle for HTTP fds
+  struct http_fds_entry *http_fds = NULL;
+  struct http_fds_entry *current_http_fd = NULL;
+
   ibuf = 0;
   lbuf = 1024;
   buf = malloc(lbuf);
@@ -202,7 +214,19 @@ void* custom_loop(void *data)
           search_post_url_in_redis(cdata, &http_post_url, redis_cmd, reply);
         }
 
-        fdhttp = http_post(fdhttp, http_post_url, 3, ptopic, pvalue);
+        // HERE I need to get the right socket_fd to make the HTTP call
+        // based on the URL
+        HASH_FIND_STR( http_fds, http_post_url, current_http_fd);
+        if ( ! current_http_fd ) {
+          current_http_fd = (struct http_fds_entry *) malloc(sizeof *current_http_fd);
+          current_http_fd->url = strdup(http_post_url);
+          // Init the socket fd (-1 is disconnected)
+          current_http_fd->fd = -1;
+          HASH_ADD_KEYPTR( hh, http_fds, current_http_fd->url, strlen(current_http_fd->url), current_http_fd);
+        }
+
+        current_http_fd->fd = http_post(current_http_fd->fd, http_post_url, 3, ptopic, pvalue);
+        fdhttp = current_http_fd->fd;
         // free Redis reply
         freeReplyObject(reply);
 
@@ -414,7 +438,7 @@ void* custom_loop(void *data)
           free(cmsg);
           cmsg = NULL;
         }
-        fdhttp = -1;
+        current_http_fd->fd = -1;
         if(cmsg)
         {
           /* Il socket è stato chiuso dal server */
