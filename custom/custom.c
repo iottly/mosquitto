@@ -58,6 +58,21 @@ struct http_fds_entry {
     UT_hash_handle hh;
 };
 
+
+const char *pro_projects[] = {
+  // Saet
+  "mqtt_rt_5b1f74164c797e00060166e9",
+  // CoInd
+  "mqtt_rt_5b1f74164c797e00060166e9",
+  NULL
+};
+
+const char * pro_msg_manager[] = {
+  "http://tasks.messagemanager-saet:8520/newmsg/mqtt",
+  "http://tasks.messagemanager-coind:8520/newmsg/mqtt",
+  NULL
+};
+
 struct timeval now;
 double elapsedTime;
 
@@ -72,6 +87,15 @@ void get_routing_key_from_topic(char *topic, char *scratchpad, char **routing_ke
     *routing_key = strtok_r(in, "/", &saveptr);
     in = NULL;
     if (*routing_key == NULL) {
+      break;
+    }
+  }
+}
+
+void search_post_url_in_static_table(char **http_post_url, char* routing_key) {
+  for (int i = 0; pro_projects[i]; ++i) {
+    if (strcmp(pro_projects[i], routing_key) == 0) {
+      *http_post_url = pro_msg_manager[i];
       break;
     }
   }
@@ -209,9 +233,11 @@ void* custom_loop(void *data)
         get_routing_key_from_topic(cmsg->topic, topic_str_scratchpad, &routing_key);
 
         if (routing_key != NULL) {
-          snprintf(redis_cmd, REDIS_CMD_LEN, "GET "REDIS_KEY_PREFIX"%s", routing_key);
+          // Get POST URL from routing key -> URL static map
+          search_post_url_in_static_table(&http_post_url, routing_key);
+          // snprintf(redis_cmd, REDIS_CMD_LEN, "GET "REDIS_KEY_PREFIX"%s", routing_key);
           // Call redis to choose the post URL
-          search_post_url_in_redis(cdata, &http_post_url, redis_cmd, reply);
+          // search_post_url_in_redis(cdata, &http_post_url, redis_cmd, reply);
         }
 
         // HERE I need to get the right socket_fd to make the HTTP call
