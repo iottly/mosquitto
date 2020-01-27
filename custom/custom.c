@@ -61,9 +61,9 @@ struct http_fds_entry {
 
 const char *pro_projects[] = {
   // Saet
-  "mqtt_rt_5b1f74164c797e00060166e9",
+  "5b1f74164c797e00060166e9",
   // CoInd
-  "mqtt_rt_5b1f74164c797e00060166e9",
+  "5c383c546da778000619a372",
   NULL
 };
 
