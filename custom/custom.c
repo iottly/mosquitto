@@ -50,6 +50,21 @@ struct msglist {
   struct timeval post_time;
 } *msg_head, *msg_tail;
 
+
+const char *pro_projects[] = {
+  // Saet
+  "5b1f74164c797e00060166e9",
+  // CoInd
+  "5c383c546da778000619a372",
+  NULL
+};
+
+const char * pro_msg_manager[] = {
+  "http://tasks.messagemanager-saet:8520/newmsg/mqtt",
+  "http://tasks.messagemanager-coind:8520/newmsg/mqtt",
+  NULL
+};
+
 struct timeval now;
 double elapsedTime;
 
